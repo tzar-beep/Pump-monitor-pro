@@ -3,3 +3,4 @@ fastapi>=0.110
 uvicorn[standard]>=0.29      # includes the 'websockets' package used by tools/test_e2e.py
 pyserial>=3.5
 paho-mqtt>=2.0               # only needed for the MQTT source
+psutil>=5.9                  # edge-node CPU / memory / temperature panel (optional)

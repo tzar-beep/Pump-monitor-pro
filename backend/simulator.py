@@ -73,9 +73,12 @@ class Simulator:
         # liquid to restrict, so flow/pressure terms vanish naturally (flow_mul=0).
         v, vk = self.valve, self.sc["valve"]
         vp = v ** vk["exp"]
+        q_before = t["flow_lpm"]
         t["flow_lpm"] *= max(0.0, 1.0 - vk["flow_k"] * vp)
         if t["flow_lpm"] > 0.5:
-            t["pressure_bar"] += vk["pres_k"] * vp
+            # Throttling moves the duty point up the pump curve H = h0 - k Q^2.
+            k = self.cfg["engineering"]["pump_curve"]["k_bar_per_lpm2"]
+            t["pressure_bar"] += k * (q_before ** 2 - t["flow_lpm"] ** 2)
             t["current_a"] += vk["cur_k"] * v
             t["temp_c"] += vk["temp_k"] * v
         t["vib"] += vk["vib_k"] * v

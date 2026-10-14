@@ -130,6 +130,58 @@ CONFIG = {
         "channel_z_crit": 4.0,
     },
 
+    # ------------------------------------------------------------------ engineering values
+    "engineering": {
+        "supply_v": 230.0,            # CAL: motor supply voltage (single-phase AC assumed)
+        "power_factor": 0.80,         # CAL: motor power factor at the duty point
+        "motor_poles": 4,             # 4-pole induction motor on 50 Hz -> 1500 rpm synchronous
+        "line_hz": 50.0,
+        "density_kg_m3": 998.0,
+        # Pump characteristic at n0: H(Q) = h0 - k*Q^2 [bar, L/min], scaled by (n/n0)^2.
+        # CAL: fit h0 (shut-off pressure) and k from two measured points on the rig.
+        "pump_curve": {"h0_bar": 3.75, "k_bar_per_lpm2": 0.00458, "n0_rpm": 1480, "q_max_lpm": 26.0},
+    },
+
+    # ------------------------------------------------------------------ fault diagnosis
+    # Rule-based: cosine similarity between the feature z-vector and each signature.
+    "diagnosis": {
+        "min_similarity": 0.55,
+        "unclassified_action": "Compare the feature table with the baseline; log the run for model retraining.",
+        "faults": {
+            "restriction": {
+                "label": "Outlet restriction / blockage",
+                "signature": {"flow_mean": -1.0, "pressure_mean": 1.0, "current_rms": 0.4},
+                "action": "Check discharge valve position, outlet line and strainer for blockage.",
+            },
+            "imbalance": {
+                "label": "Mechanical imbalance / misalignment",
+                "signature": {"vib_rms": 1.0, "vib_peak": 0.9, "vib_std": 0.3, "current_rms": 0.15},
+                "action": "Inspect impeller for debris or damage; check coupling alignment and mounting bolts.",
+            },
+            "overload": {
+                "label": "Motor overload / mechanical binding",
+                "signature": {"rpm_mean": -1.0, "current_rms": 1.0, "temp_slope": 0.5, "temp_mean": 0.4,
+                              "flow_mean": -0.3},
+                "action": "Check bearings and shaft for binding, supply voltage and load; stop if temperature keeps rising.",
+            },
+            "cavitation": {
+                "label": "Loss of prime / cavitation",
+                "signature": {"flow_mean": -1.0, "pressure_mean": -1.0, "current_rms": -0.6,
+                              "vib_rms": 0.5, "vib_peak": 0.6},
+                "action": "Check inlet level, suction line for air leaks or blockage, and priming.",
+            },
+            "dry_run": {
+                "label": "Dry run (inlet level LOW)",
+                "action": "Refill the sump. Interlock is latched: restart the pump manually once the level is restored.",
+            },
+        },
+    },
+
+    # ------------------------------------------------------------------ alarms
+    "alarms": {
+        "channel_deadband_z": 1.0,    # channel deviation alarm clears at |z| < channel_z_crit - this
+    },
+
     "alerts_keep": 200,
     "history_keep": 120,          # frames replayed to a newly connected browser
 
@@ -146,8 +198,9 @@ CONFIG = {
         "vib_axis_ratio": [1.0, 0.75, 1.25],   # x, y, z share of combined RMS
         "vib_crest": 3.0,
         "vib_off_g": 0.004,         # residual floor noise with pump stopped
-        # Valve: v in [0,1] closed. flow *= 1 - flow_k*v^exp ; pressure += pres_k*v^exp ; current += cur_k*v
-        "valve": {"flow_k": 0.85, "pres_k": 1.5, "exp": 1.3, "cur_k": 0.40, "temp_k": 3.0, "vib_k": 0.03},
+        # Valve: v in [0,1] closed. flow *= 1 - flow_k*v^exp; the pressure then moves along the
+        # pump curve (engineering.pump_curve): dP = k*(Q_before^2 - Q_after^2). current += cur_k*v
+        "valve": {"flow_k": 0.85, "exp": 1.3, "cur_k": 0.40, "temp_k": 3.0, "vib_k": 0.03},
         # Scenario targets relative to baseline. *_mul multiplies, *_add adds.
         "scenarios": {
             "normal": {

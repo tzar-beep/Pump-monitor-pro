@@ -23,6 +23,7 @@
   --ink-3: #7c878d;
   --accent: #3987e5;
   --accent-soft: rgba(57,135,229,.16);
+  --accent-water: rgba(57,135,229,.28);
   --good: #0ca30c;
   --warn: #fab219;
   --crit: #e04848;
@@ -31,7 +32,6 @@
   --warn-bg: rgba(250,178,25,.14);
   --crit-bg: rgba(224,72,72,.16);
   --grid: #20262a;
-  --shadow: none;
   color-scheme: dark;
 }
 :root[data-theme="light"] {
@@ -45,6 +45,7 @@
   --ink-3: #686e70;
   --accent: #2a78d6;
   --accent-soft: rgba(42,120,214,.12);
+  --accent-water: rgba(42,120,214,.22);
   --good: #0a8f0a;
   --warn: #c98a00;
   --crit: #d03b3b;
@@ -70,9 +71,8 @@ body {
   font-feature-settings: "tnum" 1, "zero" 1;
 }
 button, select, input { font: inherit; color: inherit; }
-h2 {
-  margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2);
-}
+h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+h3 { margin: 0 0 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .muted { color: var(--ink-3); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -85,16 +85,19 @@ h2 {
 .brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
 .brand b { font-size: 15px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
 .brand span { color: var(--ink-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.kv { display: flex; flex-direction: column; line-height: 1.15; }
+.tb-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.kv { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
 .kv small { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .kv span { font-size: 12px; white-space: nowrap; }
+#tbDevice { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.searching::after { content: "…"; }
 
 .pill {
   display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px;
   border: 1px solid var(--line-2); border-radius: 3px; font-size: 11px; font-weight: 600; letter-spacing: .06em;
   text-transform: uppercase; white-space: nowrap; background: var(--panel-2);
 }
+button.pill { cursor: pointer; }
 .pill .g { font-size: 10px; }
 .pill.good { border-color: var(--good); background: var(--good-bg); }
 .pill.warn { border-color: var(--warn); background: var(--warn-bg); }
@@ -102,6 +105,8 @@ h2 {
 .pill.good .g { color: var(--good); } .pill.warn .g { color: var(--warn); } .pill.crit .g { color: var(--crit); }
 .pill.idle .g { color: var(--idle); }
 .pill.stale { opacity: .55; background-image: repeating-linear-gradient(135deg, transparent 0 5px, var(--line) 5px 6px); }
+.pill.blink, .alm-row.blink td { animation: blink 1s steps(2, start) infinite; }
+@keyframes blink { 50% { background-color: transparent; } }
 #statusPill { height: 28px; font-size: 12px; min-width: 132px; justify-content: center; }
 .icon-btn {
   height: 26px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 3px; background: transparent; cursor: pointer; color: var(--ink-2);
@@ -111,14 +116,16 @@ h2 {
 /* ----------------------------------------------------------------- layout */
 main {
   display: grid; gap: 10px; padding: 10px 16px 24px;
-  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(330px, .9fr);
   grid-template-areas:
-    "kpi kpi"
-    "pipe pipe"
-    "trend ctrl"
-    "sensors ctrl"
-    "features alerts";
-  max-width: 1680px; margin: 0 auto;
+    "kpi kpi kpi"
+    "mimic mimic diag"
+    "trend trend ctrl"
+    "oppt edge ctrl"
+    "pipe pipe pipe"
+    "alarms alarms alarms"
+    "sensors sensors features";
+  max-width: 1760px; margin: 0 auto;
 }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; min-width: 0; }
 .panel > header {
@@ -127,12 +134,16 @@ main {
 .panel > header .spacer { margin-left: auto; }
 .panel .body { padding: 10px 12px; }
 #kpis { grid-area: kpi; }
-#pipeline { grid-area: pipe; }
+#mimicP { grid-area: mimic; }
+#diag { grid-area: diag; }
 #trend { grid-area: trend; }
 #controls { grid-area: ctrl; align-self: start; }
+#oppt { grid-area: oppt; }
+#edge { grid-area: edge; }
+#pipeline { grid-area: pipe; }
+#alarms { grid-area: alarms; }
 #sensors { grid-area: sensors; }
 #features { grid-area: features; }
-#alerts { grid-area: alerts; display: flex; flex-direction: column; }
 
 /* ----------------------------------------------------------------- KPI tiles */
 .kpis { display: grid; gap: 10px; grid-template-columns: repeat(8, minmax(0, 1fr)); }
@@ -145,6 +156,7 @@ main {
 .tile.crit { border-left-color: var(--crit); background: linear-gradient(var(--crit-bg), transparent 70%), var(--panel); }
 .tile .t-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .tile .t-label { font-size: 11px; color: var(--ink-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .t-tag { font-size: 9.5px; color: var(--ink-3); margin-left: 4px; font-weight: 400; }
 .tile .t-state { font-size: 10px; letter-spacing: .06em; color: var(--ink-3); white-space: nowrap; }
 .tile .t-state .g { margin-right: 3px; }
 .tile.good .t-state .g { color: var(--good); } .tile.warn .t-state .g { color: var(--warn); } .tile.crit .t-state .g { color: var(--crit); }
@@ -155,23 +167,80 @@ main {
 .spark { display: block; width: 100%; height: 26px; margin-top: 2px; }
 .spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .spark .base { stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 2 3; }
-.tile.gauge-tile { align-items: stretch; }
 .gauge { display: block; width: 100%; max-width: 150px; height: auto; margin: -2px auto -6px; }
 .gauge .track { stroke: var(--line-2); }
 .gauge .arc { transition: stroke-dashoffset .4s ease; }
 .gauge text { fill: var(--ink); }
 
+/* ----------------------------------------------------------------- P&ID mimic */
+.mimic-wrap { overflow-x: auto; padding: 6px 8px 2px; }
+#mimic { display: block; width: 100%; height: auto; max-height: 380px; margin: 0 auto; }
+#mimic text { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+#mimic .pipe { fill: none; stroke: var(--line-2); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+#mimic .liquid { fill: none; stroke: transparent; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+#mimic.flowing .liquid { stroke: var(--accent); stroke-dasharray: 9 7; animation: flow .8s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -16; } }
+#mimic .arrow { fill: var(--ink-3); }
+#mimic.flowing .arrow { fill: var(--accent); }
+#mimic .equip { fill: var(--panel-2); stroke: var(--ink-2); stroke-width: 1.6; }
+#mimic .equip.good { stroke: var(--good); fill: var(--good-bg); }
+#mimic .equip.crit { stroke: var(--crit); fill: var(--crit-bg); }
+#mimic .equip.warn { stroke: var(--warn); fill: var(--warn-bg); }
+#mimic .impeller { stroke: var(--ink-2); stroke-width: 2.2; fill: none; stroke-linecap: round; transform-box: view-box; transform-origin: 300px 232px; }
+#mimic.running .impeller { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#mimic .water { fill: var(--accent-water); }
+#mimic .water-line { stroke: var(--accent); stroke-width: 1.5; }
+#mimic .inst circle { fill: var(--panel); stroke: var(--ink-2); stroke-width: 1.4; }
+#mimic .inst line.bar { stroke: var(--ink-2); stroke-width: 1; }
+#mimic .inst text { fill: var(--ink); font-size: 9.5px; font-weight: 600; text-anchor: middle; }
+#mimic .sig { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+#mimic .ro rect { fill: var(--panel-2); stroke: var(--line-2); stroke-width: 1.2; }
+#mimic .ro.good rect { stroke: var(--good); } #mimic .ro.warn rect { stroke: var(--warn); fill: var(--warn-bg); }
+#mimic .ro.crit rect { stroke: var(--crit); fill: var(--crit-bg); }
+#mimic .ro .v { fill: var(--ink); font-size: 13px; font-weight: 500; text-anchor: end; }
+#mimic .ro .u { fill: var(--ink-3); font-size: 9.5px; }
+#mimic .lbl { fill: var(--ink-3); font-size: 10px; letter-spacing: .05em; }
+#mimic .lbl-b { fill: var(--ink-2); font-size: 11px; font-weight: 600; }
+#mimic .state-t { font-size: 11px; font-weight: 600; }
+#mimic .state-t.good { fill: var(--good); } #mimic .state-t.crit { fill: var(--crit); } #mimic .state-t.idle { fill: var(--ink-3); }
+#mimic .valve { fill: var(--panel-2); stroke: var(--ink-2); stroke-width: 1.6; }
+#mimic .valve-fill { fill: var(--ink-3); }
+.mimic-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 12px 10px; font-size: 11px; color: var(--ink-3); }
+.mimic-legend b { color: var(--ink-2); font-weight: 500; }
+.show-sm { display: none; }
+
+/* ----------------------------------------------------------------- diagnosis + engineering */
+.diag-card { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.diag-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.diag-head .g { font-size: 12px; }
+.diag-card.good .diag-head .g { color: var(--good); } .diag-card.warn .diag-head .g { color: var(--warn); }
+.diag-card.crit .diag-head .g { color: var(--crit); } .diag-card.idle .diag-head .g { color: var(--idle); }
+.diag-card.warn { background: linear-gradient(var(--warn-bg), transparent 80%); }
+.diag-card.crit { background: linear-gradient(var(--crit-bg), transparent 80%); }
+.diag-meta { margin-top: 4px; font-size: 11.5px; color: var(--ink-2); }
+.diag-meta .mono { font-size: 11px; color: var(--ink-3); }
+.action { margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 3px; background: var(--panel-2); font-size: 12px; }
+.action b { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); display: block; margin-bottom: 2px; }
+.rank { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; }
+.rank li { display: grid; grid-template-columns: minmax(0, 1fr) 90px 38px; gap: 8px; align-items: center; font-size: 11.5px; color: var(--ink-2); }
+.rank li span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hbar { height: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
+.hbar i { display: block; height: 100%; background: var(--ink-3); }
+.hbar i.top { background: var(--accent); }
+.kvgrid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; font-size: 12px; }
+.kvgrid dt { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kvgrid dt small { color: var(--ink-3); }
+.kvgrid dd { margin: 0; text-align: right; white-space: nowrap; }
+.kvgrid dd .u { color: var(--ink-3); font-size: 10.5px; margin-left: 3px; }
+.sect { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.sect:last-child { border-bottom: 0; }
+
 /* ----------------------------------------------------------------- pipeline */
 .pipe { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 22px; padding: 12px; }
-.node {
-  position: relative; border: 1px solid var(--line-2); border-radius: 4px; padding: 8px 10px; background: var(--panel-2); min-width: 0;
-}
-.node + .node::before {
-  content: ""; position: absolute; left: -22px; top: 50%; width: 22px; height: 1px; background: var(--line-2);
-}
-.node + .node::after {
-  content: ""; position: absolute; left: -7px; top: calc(50% - 4px); border: 4px solid transparent; border-left: 6px solid var(--ink-3);
-}
+.node { position: relative; border: 1px solid var(--line-2); border-radius: 4px; padding: 8px 10px; background: var(--panel-2); min-width: 0; }
+.node + .node::before { content: ""; position: absolute; left: -22px; top: 50%; width: 22px; height: 1px; background: var(--line-2); }
+.node + .node::after { content: ""; position: absolute; left: -7px; top: calc(50% - 4px); border: 4px solid transparent; border-left: 6px solid var(--ink-3); }
 .node.flow + .node::before { background: var(--accent); }
 .node .n-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; }
 .node .n-hw { font-size: 10.5px; color: var(--ink-3); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -182,32 +251,40 @@ main {
 .dot.good { background: var(--good); } .dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); }
 .dot.pulse { box-shadow: 0 0 0 3px var(--accent-soft); }
 
-/* ----------------------------------------------------------------- trend */
-.seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line-2); border-radius: 3px; overflow: hidden; }
+/* ----------------------------------------------------------------- charts */
+.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--line-2); border-radius: 3px; overflow: hidden; }
 .seg button { border: 0; border-right: 1px solid var(--line-2); background: transparent; padding: 3px 9px; cursor: pointer; color: var(--ink-2); font-size: 12px; }
 .seg button:last-child { border-right: 0; }
 .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
 .chart-wrap { position: relative; padding: 8px 6px 4px 0; }
-#chart { display: block; width: 100%; height: 280px; }
-#chart .grid line { stroke: var(--grid); }
-#chart .axis text { fill: var(--ink-3); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
-#chart .axis-title { fill: var(--ink-3); font-size: 10.5px; }
-#chart .series { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-#chart .area { fill: var(--accent-soft); stroke: none; }
-#chart .end { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
-#chart .end-label { fill: var(--ink); font-size: 11px; font-weight: 600; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
-#chart .th-warn { stroke: var(--warn); stroke-dasharray: 5 4; }
-#chart .th-crit { stroke: var(--crit); stroke-dasharray: 5 4; }
-#chart .th-label { font-size: 10px; fill: var(--ink-2); font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
-#chart .base { stroke: var(--ink-3); stroke-dasharray: 2 4; }
-#chart .cross { stroke: var(--ink-3); }
-#chart .hover-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
-#chart .empty { fill: var(--ink-3); font-size: 12px; }
+svg.chart { display: block; width: 100%; height: 280px; }
+svg.chart .grid line { stroke: var(--grid); }
+svg.chart .axis text, svg.chart .tick { fill: var(--ink-3); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+svg.chart .axis-title { fill: var(--ink-3); font-size: 10.5px; }
+svg.chart .series { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+svg.chart .series.thin { stroke-width: 1.5; }
+svg.chart .area { fill: var(--accent-soft); stroke: none; }
+svg.chart .end { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+svg.chart .end-label { fill: var(--ink); font-size: 11px; font-weight: 600; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+svg.chart .th-warn { stroke: var(--warn); stroke-dasharray: 5 4; }
+svg.chart .th-crit { stroke: var(--crit); stroke-dasharray: 5 4; }
+svg.chart .th-label { font-size: 10px; fill: var(--ink-2); font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+svg.chart .base { stroke: var(--ink-3); stroke-dasharray: 2 4; }
+svg.chart .ref { fill: none; stroke: var(--ink-3); stroke-width: 1.5; }
+svg.chart .ref.dash { stroke-dasharray: 5 4; }
+svg.chart .row-label { fill: var(--ink-2); font-size: 10.5px; font-weight: 500; }
+svg.chart .row-sep { stroke: var(--line); }
+svg.chart .cross { stroke: var(--ink-3); }
+svg.chart .hover-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+svg.chart .trail { fill: var(--accent); }
+svg.chart .design { fill: none; stroke: var(--ink-2); stroke-width: 1.5; }
+svg.chart .empty { fill: var(--ink-3); font-size: 12px; }
 .tip {
   position: absolute; pointer-events: none; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 3px;
   padding: 5px 8px; font-size: 11px; white-space: nowrap; display: none; z-index: 2; box-shadow: 0 4px 14px rgba(0,0,0,.25);
 }
 .tip b { font-weight: 600; }
+.tip table td { padding: 0 6px 0 0; border: 0; font-size: 11px; }
 .trend-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 12px 10px; font-size: 11px; color: var(--ink-3); }
 .trend-meta .num { color: var(--ink-2); }
 
@@ -232,8 +309,22 @@ details.info code, .formula { font-family: "IBM Plex Mono", ui-monospace, Consol
 .formula { display: block; margin: 6px 0; padding: 6px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; white-space: pre-wrap; color: var(--ink); }
 .tag { display: inline-block; padding: 1px 6px; border: 1px dashed var(--line-2); border-radius: 2px; font-size: 10.5px; color: var(--ink-2); }
 
-/* ----------------------------------------------------------------- alerts */
-#alertList { list-style: none; margin: 0; padding: 0; overflow-y: auto; max-height: 420px; flex: 1; }
+/* ----------------------------------------------------------------- alarms */
+.alarm-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.alarm-grid > div { min-width: 0; }
+.alarm-grid > div + div { border-left: 1px solid var(--line); }
+.alarm-grid h3 { padding: 8px 12px 0; }
+#almTable td { font-size: 12px; }
+#almTable .tagc { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-weight: 600; white-space: nowrap; }
+.prio { display: inline-block; min-width: 40px; text-align: center; padding: 0 4px; border-radius: 2px; font-size: 10px; font-weight: 600; letter-spacing: .05em; border: 1px solid; }
+.prio.HIGH { color: var(--crit); border-color: var(--crit); } .prio.MED { color: var(--warn); border-color: var(--warn); } .prio.LOW { color: var(--ink-2); border-color: var(--line-2); }
+.alm-row.unack.HIGH td { background: var(--crit-bg); } .alm-row.unack.MED td { background: var(--warn-bg); }
+.alm-row.rtn td { color: var(--ink-3); }
+.alm-state { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; white-space: nowrap; }
+.ack-btn { height: 22px; padding: 0 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; border: 1px solid var(--line-2); border-radius: 3px; background: var(--panel-2); cursor: pointer; }
+.ack-btn:hover { border-color: var(--ink-3); }
+.alm-empty { padding: 14px 12px; color: var(--ink-3); font-size: 12px; }
+#alertList { list-style: none; margin: 0; padding: 0; overflow-y: auto; max-height: 330px; }
 #alertList li {
   display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; align-items: baseline;
   padding: 6px 12px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; font-size: 12px;
@@ -285,43 +376,50 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .counters .num { font-size: 13px; }
 .counters .bad .num { color: var(--crit); }
 .path { font-size: 11px; color: var(--ink-2); overflow-wrap: anywhere; }
-
-/* ----------------------------------------------------------------- responsive */
-/* ----------------------------------------------------------------- toast + scan list */
-.toast {
-  position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px);
-  display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 4px; border: 1px solid var(--line-2);
-  background: var(--panel-2); box-shadow: 0 8px 28px rgba(0,0,0,.45); font-weight: 600; font-size: 13px;
-  transition: opacity .25s ease, transform .25s ease;
-}
-.toast[hidden] { display: none; }
-.toast.good { border-color: var(--good); } .toast.crit { border-color: var(--crit); }
-.toast .g { font-size: 14px; } .toast.good .g { color: var(--good); } .toast.crit .g { color: var(--crit); }
-.toast .msg { overflow-wrap: anywhere; }
 .scan { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; }
 .scan li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; padding: 3px 0; border-top: 1px dashed var(--line); }
 .scan li b { font-weight: 500; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
 .scan li span { color: var(--ink-3); overflow-wrap: anywhere; }
 .scan li.ok span { color: var(--good); }
-.searching::after { content: "…"; }
-#tbDevice { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
-/* Last-known values while the stream is stale/disconnected: dimmed so they never read as live. */
-body.is-stale .tile .v, body.is-stale .tile .spark, body.is-stale .gauge,
-body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .series { opacity: .4; }
 
-@media (max-width: 1400px) {
+/* ----------------------------------------------------------------- toast */
+.toast {
+  position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px);
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 4px; border: 1px solid var(--line-2);
+  background: var(--panel-2); box-shadow: 0 8px 28px rgba(0,0,0,.45); font-weight: 600; font-size: 13px;
+}
+.toast[hidden] { display: none; }
+.toast.good { border-color: var(--good); } .toast.crit { border-color: var(--crit); }
+.toast .g { font-size: 14px; } .toast.good .g { color: var(--good); } .toast.crit .g { color: var(--crit); }
+.toast .msg { overflow-wrap: anywhere; }
+
+/* Last-known values while the stream is stale/disconnected: dimmed so they never read as live. */
+body.is-stale .tile .v, body.is-stale .tile .spark, body.is-stale .gauge, body.is-stale #mimic .ro,
+body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale svg.chart .series,
+body.is-stale .kvgrid dd, body.is-stale .diag-card { opacity: .4; }
+
+/* ----------------------------------------------------------------- responsive */
+@media (max-width: 1500px) {
   .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
+  main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "kpi kpi" "mimic mimic" "diag ctrl" "trend trend" "oppt edge"
+      "pipe pipe" "alarms alarms" "sensors sensors" "features features";
+  }
   .pipe { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .node:nth-child(4)::before, .node:nth-child(4)::after { display: none; }
 }
 @media (max-width: 980px) {
   main {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "kpi" "trend" "ctrl" "pipe" "sensors" "features" "alerts";
+    grid-template-areas: "kpi" "diag" "mimic" "trend" "alarms" "ctrl" "oppt" "edge" "pipe" "sensors" "features";
   }
   .topbar { position: static; }
+  .alarm-grid { grid-template-columns: minmax(0, 1fr); }
+  .alarm-grid > div + div { border-left: 0; border-top: 1px solid var(--line); }
 }
 @media (max-width: 640px) {
   main { padding: 8px 16px 20px; gap: 8px; }
@@ -329,17 +427,19 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
   .brand span { display: none; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .tile .t-val .v { font-size: 20px; }
+  #mimic { min-width: 620px; }
+  .show-sm { display: inline; }
   .pipe { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .node + .node::before { left: 50%; top: -14px; width: 1px; height: 14px; }
   .node + .node::after { left: calc(50% - 4px); top: -7px; border: 4px solid transparent; border-top: 6px solid var(--ink-3); }
   .node:nth-child(4)::before, .node:nth-child(4)::after { display: block; }
-  #chart { height: 220px; }
+  svg.chart { height: 220px; }
   .hide-sm { display: none; }
   th, td { padding: 6px 7px; }
-  .counters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .zbar { width: 54px; }
   #sensors th, #sensors td { padding: 6px 5px; }
   #sensors .chip { white-space: normal; }
+  .counters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .zbar { width: 54px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -349,9 +449,10 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
 <body>
 
 <header class="topbar" role="banner">
-  <div class="brand"><b>Pump Health Console</b><span>Centrifugal pump test rig · edge AI on Raspberry Pi 5</span></div>
+  <div class="brand"><b>Pump Health Console</b><span>P-101 centrifugal pump test rig · edge AI on Raspberry Pi 5</span></div>
   <div class="tb-group">
     <span id="statusPill" class="pill idle" role="status" aria-live="polite"><span class="g">○</span><span class="t">CONNECTING</span></span>
+    <button id="almPill" class="pill idle" type="button" title="Go to the alarm list"><span class="g">○</span><span class="t">NO ALARMS</span></button>
     <div class="kv"><small>Pump</small><span id="tbPump" class="num">—</span></div>
     <div class="kv"><small>Device</small><span id="tbDevice" class="num">—</span></div>
     <div class="kv"><small>Stream</small><span id="tbStream" class="num">—</span></div>
@@ -365,16 +466,127 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
 <div class="toast" id="toast" role="alert" hidden><span class="g"></span><span class="msg"></span></div>
 
 <main>
-  <!-- 1. KPI row ---------------------------------------------------------->
+  <!-- KPI row ------------------------------------------------------------>
   <section id="kpis" class="kpis" aria-label="Key indicators"></section>
 
-  <!-- 5. Pipeline ---------------------------------------------------------->
-  <section id="pipeline" class="panel" aria-label="Data pipeline">
-    <header><h2>Data pipeline</h2><span class="muted" id="pipeNote">Sensors → ESP32 → Pi 5 → model → HMI</span></header>
-    <div class="pipe" id="pipe"></div>
+  <!-- P&ID mimic ---------------------------------------------------------->
+  <section id="mimicP" class="panel" aria-label="Process schematic">
+    <header><h2>Process schematic</h2><span class="muted">P&amp;ID · live instrument values</span><span class="tag spacer" id="mimicMode">—</span></header>
+    <div class="mimic-wrap">
+      <svg id="mimic" viewBox="0 0 700 310" role="img" aria-label="Piping and instrumentation diagram of the pump rig">
+        <!-- return line (top) and process line -->
+        <path class="pipe" d="M318 190 V95 H672 V28 H80 V96"/>
+        <path class="liquid" d="M318 190 V95 H672 V28 H80 V96"/>
+        <!-- suction line -->
+        <path class="pipe" d="M140 232 H268"/>
+        <path class="liquid" d="M140 232 H268"/>
+        <path class="arrow" d="M205 226 l10 6 l-10 6 z"/>
+        <path class="arrow" d="M312 140 l6 -10 l6 10 z"/>
+        <path class="arrow" d="M430 89 l10 6 l-10 6 z"/>
+        <path class="arrow" d="M520 22 l-10 6 l10 6 z"/>
+        <path class="arrow" d="M74 70 l6 10 l6 -10 z"/>
+
+        <!-- sump tank T-101 -->
+        <rect class="water" id="mWater" x="21" y="110" width="118" height="149"/>
+        <line class="water-line" id="mWaterLine" x1="21" x2="139" y1="110" y2="110"/>
+        <path class="equip" d="M20 70 V260 H140 V70" fill="none" style="fill:none"/>
+        <text class="lbl-b" x="80" y="282" text-anchor="middle">T-101</text>
+        <text class="lbl" x="80" y="296" text-anchor="middle">SUMP</text>
+
+        <!-- LSL-101 float switch -->
+        <line class="sig" x1="140" y1="214" x2="160" y2="214"/>
+        <g class="inst" transform="translate(176 214)"><circle r="16"/><line class="bar" x1="-16" x2="16" y1="0" y2="0"/><text y="-3">LSL</text><text y="10">101</text></g>
+        <text class="state-t idle" id="mFloat" x="176" y="250" text-anchor="middle">—</text>
+
+        <!-- pump P-101 + impeller -->
+        <rect class="equip" id="mNozzle" x="304" y="186" width="28" height="18"/>
+        <circle class="equip" id="mPump" cx="300" cy="232" r="32"/>
+        <g class="impeller"><path d="M300 232 l0 -20 M300 232 l17 10 M300 232 l-17 10"/></g>
+        <text class="lbl-b" x="300" y="282" text-anchor="middle">P-101</text>
+        <text class="lbl" x="300" y="296" text-anchor="middle" id="mPumpState">—</text>
+
+        <!-- shaft + motor M-101 -->
+        <line x1="332" y1="232" x2="350" y2="232" stroke="var(--ink-2)" stroke-width="4"/>
+        <rect class="equip" id="mMotor" x="350" y="208" width="66" height="48" rx="3"/>
+        <text x="383" y="237" text-anchor="middle" style="fill:var(--ink);font-size:16px;font-weight:600">M</text>
+        <text class="lbl-b" x="383" y="201" text-anchor="middle">M-101</text>
+
+        <!-- VT-101 vibration on pump casing -->
+        <line class="sig" x1="279" y1="207" x2="252" y2="168"/>
+        <g class="inst" transform="translate(242 156)"><circle r="16"/><line class="bar" x1="-16" x2="16" y1="0" y2="0"/><text y="-3">VT</text><text y="10">101</text></g>
+        <g class="ro" id="ro-vib" transform="translate(196 118)"><rect width="88" height="22" rx="2"/><text class="v" x="58" y="15.5">—</text><text class="u" x="62" y="15.5">g</text></g>
+
+        <!-- ST-101 speed on shaft -->
+        <line class="sig" x1="341" y1="236" x2="341" y2="266"/>
+        <g class="inst" transform="translate(341 282)"><circle r="16"/><line class="bar" x1="-16" x2="16" y1="0" y2="0"/><text y="-3">ST</text><text y="10">101</text></g>
+        <g class="ro" id="ro-rpm" transform="translate(420 272)"><rect width="92" height="22" rx="2"/><text class="v" x="58" y="15.5">—</text><text class="u" x="62" y="15.5">rpm</text></g>
+        <line class="sig" x1="357" y1="282" x2="420" y2="283"/>
+
+        <!-- IT-101 current, TT-101 temperature on motor -->
+        <line class="sig" x1="416" y1="220" x2="446" y2="196"/>
+        <g class="inst" transform="translate(460 190)"><circle r="16"/><line class="bar" x1="-16" x2="16" y1="0" y2="0"/><text y="-3">IT</text><text y="10">101</text></g>
+        <g class="ro" id="ro-current" transform="translate(482 179)"><rect width="88" height="22" rx="2"/><text class="v" x="58" y="15.5">—</text><text class="u" x="62" y="15.5">A</text></g>
+        <line class="sig" x1="416" y1="246" x2="446" y2="238"/>
+        <g class="inst" transform="translate(460 238)"><circle r="16"/><line class="bar" x1="-16" x2="16" y1="0" y2="0"/><text y="-3">TT</text><text y="10">101</text></g>
+        <g class="ro" id="ro-temp" transform="translate(482 227)"><rect width="88" height="22" rx="2"/><text class="v" x="58" y="15.5">—</text><text class="u" x="62" y="15.5">°C</text></g>
+
+        <!-- PT-101 pressure on discharge -->
+        <line class="sig" x1="372" y1="95" x2="372" y2="74"/>
+        <g class="inst" transform="translate(372 58)"><circle r="16"/><line class="bar" x1="-16" x2="16" y1="0" y2="0"/><text y="-3">PT</text><text y="10">101</text></g>
+        <g class="ro" id="ro-pressure" transform="translate(330 108)"><rect width="88" height="22" rx="2"/><text class="v" x="58" y="15.5">—</text><text class="u" x="62" y="15.5">bar</text></g>
+
+        <!-- FT-101 flow meter -->
+        <rect class="equip" x="470" y="85" width="26" height="20" rx="2"/>
+        <line class="sig" x1="483" y1="85" x2="483" y2="74"/>
+        <g class="inst" transform="translate(483 58)"><circle r="16"/><line class="bar" x1="-16" x2="16" y1="0" y2="0"/><text y="-3">FT</text><text y="10">101</text></g>
+        <g class="ro" id="ro-flow" transform="translate(436 113)"><rect width="96" height="22" rx="2"/><text class="v" x="58" y="15.5">—</text><text class="u" x="62" y="15.5">L/min</text></g>
+
+        <!-- HV-101 discharge valve -->
+        <path class="valve" d="M578 82 L604 108 V82 L578 108 Z"/>
+        <path class="valve-fill" id="mValveFill" d="M578 82 L591 95 L578 108 Z" opacity="0"/>
+        <line x1="591" y1="95" x2="591" y2="70" stroke="var(--ink-2)" stroke-width="1.5"/>
+        <rect x="583" y="62" width="16" height="8" class="valve"/>
+        <text class="lbl-b" x="591" y="52" text-anchor="middle">HV-101</text>
+        <g class="ro" id="ro-valve" transform="translate(546 113)"><rect width="94" height="22" rx="2"/><text class="v" x="50" y="15.5">—</text><text class="u" x="54" y="15.5">% shut</text></g>
+
+        <!-- duty point summary -->
+        <g transform="translate(590 160)">
+          <text class="lbl" x="0" y="0">DUTY POINT</text>
+          <text class="lbl-b" x="0" y="18" id="mDutyQ">Q —</text>
+          <text class="lbl-b" x="0" y="34" id="mDutyH">H —</text>
+          <text class="lbl-b" x="0" y="50" id="mDutyP">P —</text>
+          <text class="lbl-b" x="0" y="66" id="mDutyE">η —</text>
+        </g>
+      </svg>
+    </div>
+    <div class="mimic-legend">
+      <span class="show-sm">↔ swipe the schematic sideways</span>
+      <span><b>PT</b> pressure</span><span><b>FT</b> flow</span><span><b>TT</b> temperature</span><span><b>IT</b> current</span>
+      <span><b>ST</b> speed</span><span><b>VT</b> vibration</span><span><b>LSL</b> level switch low</span><span><b>HV</b> hand valve</span>
+      <span>Readout border = channel state · dashes = signal line</span>
+    </div>
   </section>
 
-  <!-- 3. Trend ------------------------------------------------------------->
+  <!-- Diagnosis + engineering --------------------------------------------->
+  <section id="diag" class="panel" aria-label="Diagnosis and engineering values">
+    <header><h2>Diagnosis</h2><span class="tag spacer">rule-based signature match</span></header>
+    <div class="diag-card idle" id="diagCard">
+      <div class="diag-head"><span class="g">○</span><span id="diagLabel">Waiting for data</span></div>
+      <div class="diag-meta" id="diagMeta"></div>
+      <div class="action" id="diagAction" hidden><b>Recommended action</b><span></span></div>
+      <ul class="rank" id="diagRank"></ul>
+    </div>
+    <div class="sect">
+      <h3>Engineering values <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· window means</span></h3>
+      <dl class="kvgrid" id="engGrid"></dl>
+    </div>
+    <div class="sect">
+      <h3>Session totals</h3>
+      <dl class="kvgrid" id="totGrid"></dl>
+    </div>
+  </section>
+
+  <!-- Trend ---------------------------------------------------------------->
   <section id="trend" class="panel" aria-label="Trend">
     <header>
       <h2>Trend</h2>
@@ -382,13 +594,13 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
       <div class="seg spacer" id="metricSeg" role="group" aria-label="Trend metric"></div>
     </header>
     <div class="chart-wrap" id="chartWrap">
-      <svg id="chart" role="img" aria-label="Trend chart"></svg>
+      <svg id="chart" class="chart" role="img" aria-label="Trend chart"></svg>
       <div class="tip" id="tip"></div>
     </div>
     <div class="trend-meta" id="trendMeta"></div>
   </section>
 
-  <!-- 8. Controls ---------------------------------------------------------->
+  <!-- Controls ------------------------------------------------------------->
   <section id="controls" class="panel" aria-label="Controls">
     <header><h2>Controls</h2></header>
     <div class="ctl">
@@ -413,10 +625,10 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
       <fieldset id="scenSet"><legend class="sr">Simulator scenario</legend><div class="scen" id="scenList"></div></fieldset>
     </div>
     <div class="ctl">
-      <label for="valve">Discharge valve <span class="num" id="valveVal" style="color:var(--ink)">0 % closed</span></label>
+      <label for="valve">Discharge valve HV-101 <span class="num" id="valveVal" style="color:var(--ink)">0 % closed</span></label>
       <fieldset id="valveSet"><input id="valve" type="range" min="0" max="100" step="1" value="0" aria-describedby="valveHelp">
       <div class="range-scale num"><span>0 open</span><span>50</span><span>100 shut</span></div></fieldset>
-      <div class="note" id="valveHelp">Adds outlet restriction on top of any scenario.</div>
+      <div class="note" id="valveHelp">Throttles the discharge on top of any scenario; the duty point moves up the pump curve.</div>
     </div>
     <div class="ctl">
       <div class="btn-row">
@@ -437,23 +649,65 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
     </div>
   </section>
 
-  <!-- 4. Sensors ----------------------------------------------------------->
+  <!-- Operating point ------------------------------------------------------>
+  <section id="oppt" class="panel" aria-label="Pump operating point">
+    <header><h2>Operating point</h2><span class="muted">pressure vs flow on the pump curve</span></header>
+    <div class="chart-wrap"><svg id="opChart" class="chart" role="img" aria-label="Operating point chart" style="height:260px"></svg></div>
+    <div class="trend-meta" id="opMeta"></div>
+  </section>
+
+  <!-- Edge node ------------------------------------------------------------>
+  <section id="edge" class="panel" aria-label="Edge node">
+    <header><h2>Edge node</h2><span class="muted" id="edgeHost">Raspberry Pi 5</span></header>
+    <div class="sect"><dl class="kvgrid" id="edgeGrid"></dl></div>
+  </section>
+
+  <!-- Pipeline ------------------------------------------------------------->
+  <section id="pipeline" class="panel" aria-label="Data pipeline">
+    <header><h2>Data pipeline</h2><span class="muted">Sensors → ESP32 → Pi 5 → model → HMI</span></header>
+    <div class="pipe" id="pipe"></div>
+  </section>
+
+  <!-- Alarms --------------------------------------------------------------->
+  <section id="alarms" class="panel" aria-label="Alarms">
+    <header>
+      <h2>Alarms</h2><span class="muted num" id="almSummary"></span>
+      <button class="ack-btn spacer" id="ackAll" type="button">ACK ALL</button>
+    </header>
+    <div class="alarm-grid">
+      <div>
+        <h3>Active alarm list</h3>
+        <div class="tbl-wrap">
+          <table id="almTable">
+            <thead><tr><th>In</th><th>Tag</th><th>Description</th><th>Pri</th><th>State</th><th class="r hide-sm">Value</th><th></th></tr></thead>
+            <tbody id="almBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h3>Event log <span class="muted num" id="alertCounts" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h3>
+        <ul id="alertList" aria-live="polite"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sensors -------------------------------------------------------------->
   <section id="sensors" class="panel" aria-label="Sensors">
     <header><h2>Sensors</h2><span class="muted">ESP32 acquisition · raw per-sample values</span></header>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Sensor</th><th class="hide-sm">Channel</th><th class="r">Reading</th><th>Unit</th><th class="r hide-sm">Valid range</th><th>Status</th><th>ML features</th></tr></thead>
+        <thead><tr><th>Tag / sensor</th><th class="hide-sm">Channel</th><th class="r">Reading</th><th>Unit</th><th class="r hide-sm">Valid range</th><th>Status</th><th>ML features</th></tr></thead>
         <tbody id="sensorBody"></tbody>
       </table>
     </div>
   </section>
 
-  <!-- 6. Feature vector ---------------------------------------------------->
+  <!-- Feature vector ------------------------------------------------------->
   <section id="features" class="panel" aria-label="Feature vector">
     <header><h2>Feature vector</h2><span class="muted" id="featNote"></span><span class="tag spacer" id="scorerTag">scorer</span></header>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Feature</th><th class="r">Value</th><th class="r">Baseline</th><th class="r hide-sm">Scale σ</th><th class="r">z</th><th>Deviation</th></tr></thead>
+        <thead><tr><th>Feature</th><th class="r">Value</th><th class="r">Baseline</th><th class="r hide-sm">σ</th><th class="r">z</th><th>Deviation</th></tr></thead>
         <tbody id="featBody"></tbody>
       </table>
     </div>
@@ -461,12 +715,6 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
       <summary>How the anomaly score is computed</summary>
       <div id="scoreInfoBody"></div>
     </details>
-  </section>
-
-  <!-- 7. Alerts ------------------------------------------------------------>
-  <section id="alerts" class="panel" aria-label="Alerts">
-    <header><h2>Alerts</h2><span class="muted num" id="alertCounts"></span></header>
-    <ul id="alertList" aria-live="polite"></ul>
   </section>
 </main>
 
@@ -481,26 +729,23 @@ body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .
 
      transport (WebSocket)  ->  store  ->  renderers
 
-   Baselines, thresholds and feature definitions arrive from the Pi in the
-   "hello" message (backend/config.py is the single source of truth).
+   Baselines, thresholds, pump curve and feature definitions arrive from the
+   Pi in the "hello" message (backend/config.py is the single source of truth).
    Frontend-only tunables live in UI below.
    ====================================================================== */
 const UI = {
-  // ws://<page host>/ws when served by the Pi; fallback when opened as a file.
   wsUrl: location.protocol.startsWith("http")
     ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`
     : "ws://localhost:8000/ws",
-  trendLen: 120,          // samples in the main trend
-  sparkLen: 60,           // samples in KPI sparklines
+  trendLen: 120,
+  sparkLen: 60,
+  trailLen: 60,           // operating-point trail
   reconnectMs: [500, 1000, 2000, 4000, 5000],
-  valveSendMs: 150,       // slider throttle
+  valveSendMs: 150,
   maxAlertsShown: 200,
 };
 
-/* ----------------------------------------------------------------------
-   Formatting helpers. Numbers are padded with FIGURE SPACE (U+2007, same
-   advance as a digit in tabular fonts) so values never change width.
-   ---------------------------------------------------------------------- */
+/* Numbers are padded with FIGURE SPACE (same advance as a digit) so values never change width. */
 const FS = " ";
 const fmt = (v, dp, width = 0) => {
   if (v === null || v === undefined || Number.isNaN(v)) return "—".padStart(width, FS);
@@ -510,7 +755,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hhmmss = (t) => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
-const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const dur = (s) => { s = Math.round(s || 0); return `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
 
 const GLYPH = { good: "●", warn: "▲", crit: "✕", idle: "○" };
 const STATUS_CLASS = {
@@ -518,13 +763,14 @@ const STATUS_CLASS = {
   "DRY-RUN PROTECTION": "crit", "STANDBY": "idle", "STARTING": "idle",
 };
 const STATE_LABEL = { good: "OK", warn: "WARN", crit: "ALARM", idle: "IDLE" };
+const TAGS = { hall: "ST-101", current: "IT-101", temp: "TT-101", flow: "FT-101", pressure: "PT-101", vib: "VT-101", float: "LSL-101" };
 
 /* ======================================================================
    STORE
    ====================================================================== */
 const store = {
   cfg: null, frames: [], alerts: [], state: null,
-  ws: null, wsOpen: false, lastFrameAt: 0, metric: "score",
+  ws: null, wsOpen: false, lastFrameAt: 0, metric: "all",
   get last() { return this.frames[this.frames.length - 1] || null; },
 };
 
@@ -561,6 +807,7 @@ const handlers = {
     store.alerts = m.alerts.slice().reverse();
     store.state = m.state;
     store.lastFrameAt = store.frames.length ? performance.now() - (m.state.last_valid_age_s ?? 0) * 1000 : 0;
+    chart.hover = null;
     build.all();
     render.all();
   },
@@ -590,6 +837,13 @@ function showToast(cls, msg) {
   showToast.t = setTimeout(() => { t.hidden = true; }, cls === "crit" ? 10000 : 6000);
 }
 
+function flashError(msg) {
+  const el = $("srcErr");
+  el.hidden = false; el.textContent = msg;
+  clearTimeout(flashError.t);
+  flashError.t = setTimeout(() => render.state(), 4000);
+}
+
 /** Device line for the top bar and pipeline: where the ESP32 is, or what the scan is doing. */
 function deviceText() {
   const s = store.state, ser = s?.serial;
@@ -600,34 +854,29 @@ function deviceText() {
   return ser.port ? `${ser.port} unplugged · rescanning` : "searching USB";
 }
 
-function flashError(msg) {
-  const el = $("srcErr");
-  el.hidden = false; el.textContent = msg;
-  clearTimeout(flashError.t);
-  flashError.t = setTimeout(() => render.state(), 4000);
-}
-
 /* ======================================================================
-   DEFINITIONS (derived from the hello config)
+   DEFINITIONS
    ====================================================================== */
 const KPIS = [
   { id: "health", label: "Health index", kind: "gauge" },
-  { id: "score", label: "Anomaly score", unit: "", dp: 2, w: 4, get: (f) => f.score },
-  { id: "rpm", label: "Speed", unit: "rpm", dp: 0, w: 4, get: (f) => f.reading.rpm, ch: "hall", base: "rpm" },
-  { id: "current", label: "Motor current", unit: "A", dp: 2, w: 5, get: (f) => f.reading.current_a, ch: "current", base: "current_a" },
-  { id: "flow", label: "Flow", unit: "L/min", dp: 1, w: 4, get: (f) => f.reading.flow_lpm, ch: "flow", base: "flow_lpm" },
-  { id: "pressure", label: "Outlet pressure", unit: "bar", dp: 2, w: 4, get: (f) => f.reading.pressure_bar, ch: "pressure", base: "pressure_bar" },
-  { id: "temp", label: "Motor temp", unit: "°C", dp: 1, w: 5, get: (f) => f.reading.temp_c, ch: "temp", base: "temp_c" },
-  { id: "vib", label: "Vibration RMS", unit: "g", dp: 3, w: 5, get: (f) => f.reading.vib_rms, ch: "vib", base: "vib_rms" },
+  { id: "score", label: "Anomaly score", tag: "AI-101", unit: "", dp: 2, w: 4, get: (f) => f.score },
+  { id: "rpm", label: "Speed", tag: "ST-101", unit: "rpm", dp: 0, w: 4, get: (f) => f.reading.rpm, ch: "hall", base: "rpm" },
+  { id: "current", label: "Motor current", tag: "IT-101", unit: "A", dp: 2, w: 5, get: (f) => f.reading.current_a, ch: "current", base: "current_a" },
+  { id: "flow", label: "Flow", tag: "FT-101", unit: "L/min", dp: 1, w: 4, get: (f) => f.reading.flow_lpm, ch: "flow", base: "flow_lpm" },
+  { id: "pressure", label: "Outlet pressure", tag: "PT-101", unit: "bar", dp: 2, w: 4, get: (f) => f.reading.pressure_bar, ch: "pressure", base: "pressure_bar" },
+  { id: "temp", label: "Motor temp", tag: "TT-101", unit: "°C", dp: 1, w: 5, get: (f) => f.reading.temp_c, ch: "temp", base: "temp_c" },
+  { id: "vib", label: "Vibration RMS", tag: "VT-101", unit: "g", dp: 3, w: 5, get: (f) => f.reading.vib_rms, ch: "vib", base: "vib_rms" },
 ];
 const METRICS = {
-  current: { label: "Current", unit: "A", dp: 2, get: (f) => f.reading.current_a, base: "current_a" },
-  flow: { label: "Flow", unit: "L/min", dp: 1, get: (f) => f.reading.flow_lpm, base: "flow_lpm" },
-  pressure: { label: "Pressure", unit: "bar", dp: 2, get: (f) => f.reading.pressure_bar, base: "pressure_bar" },
-  temp: { label: "Temperature", unit: "°C", dp: 1, get: (f) => f.reading.temp_c, base: "temp_c" },
-  vib: { label: "Vibration", unit: "g", dp: 3, get: (f) => f.reading.vib_rms, base: "vib_rms" },
-  score: { label: "Anomaly score", unit: "", dp: 2, get: (f) => f.score, fixed: [0, 1], thresholds: true },
+  score: { label: "Anomaly score", tag: "AI-101", unit: "", dp: 2, get: (f) => f.score, fixed: [0, 1], thresholds: true },
+  rpm: { label: "Speed", tag: "ST-101", unit: "rpm", dp: 0, get: (f) => f.reading.rpm, base: "rpm" },
+  current: { label: "Current", tag: "IT-101", unit: "A", dp: 2, get: (f) => f.reading.current_a, base: "current_a" },
+  flow: { label: "Flow", tag: "FT-101", unit: "L/min", dp: 1, get: (f) => f.reading.flow_lpm, base: "flow_lpm" },
+  pressure: { label: "Pressure", tag: "PT-101", unit: "bar", dp: 2, get: (f) => f.reading.pressure_bar, base: "pressure_bar" },
+  temp: { label: "Temperature", tag: "TT-101", unit: "°C", dp: 1, get: (f) => f.reading.temp_c, base: "temp_c" },
+  vib: { label: "Vibration", tag: "VT-101", unit: "g", dp: 3, get: (f) => f.reading.vib_rms, base: "vib_rms" },
 };
+const STRIP_ORDER = ["score", "rpm", "current", "flow", "pressure", "temp", "vib"];
 
 /* ======================================================================
    BUILD — one-time DOM construction after hello
@@ -637,7 +886,7 @@ const build = {
 
   kpis() {
     $("kpis").innerHTML = KPIS.map((k) => k.kind === "gauge" ? `
-      <div class="tile gauge-tile" id="k-health">
+      <div class="tile" id="k-health">
         <div class="t-head"><span class="t-label">${k.label}</span><span class="t-state"><span class="g">○</span><span class="s">—</span></span></div>
         <svg class="gauge" viewBox="0 0 120 84" aria-hidden="true">
           <path class="track" d="${arcPath(60, 60, 46, -120, 120)}" fill="none" stroke-width="8"/>
@@ -647,7 +896,7 @@ const build = {
         </svg>
       </div>` : `
       <div class="tile" id="k-${k.id}">
-        <div class="t-head"><span class="t-label">${k.label}</span><span class="t-state"><span class="g">○</span><span class="s">—</span></span></div>
+        <div class="t-head"><span class="t-label">${k.label}<span class="t-tag num">${k.tag}</span></span><span class="t-state"><span class="g">○</span><span class="s">—</span></span></div>
         <div class="t-val"><span class="v num">—</span><span class="u">${k.unit}</span></div>
         <div class="t-sub num"></div>
         <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><path class="base"/><path class="line"/></svg>
@@ -655,9 +904,9 @@ const build = {
   },
 
   metricSeg() {
-    const order = ["current", "flow", "pressure", "temp", "vib", "score"];
+    const order = ["all", "current", "flow", "pressure", "temp", "vib", "score"];
     $("metricSeg").innerHTML = order.map((k) =>
-      `<button type="button" data-m="${k}" aria-pressed="${k === store.metric}">${METRICS[k].label}</button>`).join("");
+      `<button type="button" data-m="${k}" aria-pressed="${k === store.metric}">${k === "all" ? "All channels" : METRICS[k].label}</button>`).join("");
   },
 
   pipeline() {
@@ -667,7 +916,7 @@ const build = {
       ["pi", "Raspberry Pi 5", "validate · window · features"],
       ["model", "Isolation Forest", "anomaly scoring (edge)"],
       ["health", "Health index", "(1 − score) × 100"],
-      ["hmi", "HMI / alert", "this console · CSV log"],
+      ["hmi", "HMI / alert", "this console · alarms · CSV"],
     ];
     $("pipe").innerHTML = nodes.map(([id, t, hw]) => `
       <div class="node" id="n-${id}">
@@ -686,7 +935,7 @@ const build = {
       const r = s.id === "vib" ? `0–16/axis` : s.id === "float" ? "0 | 1" :
         `${(ranges[s.field] || s.range)[0]}–${(ranges[s.field] || s.range)[1]}`;
       return `<tr id="s-${s.id}">
-        <td><b style="font-weight:500">${esc(s.part)}</b><span class="sub">${esc(s.name)}</span></td>
+        <td><b style="font-weight:600" class="mono">${TAGS[s.id]}</b> <span style="font-weight:500">${esc(s.part)}</span><span class="sub">${esc(s.name)}</span></td>
         <td class="hide-sm mono" style="font-size:11px;color:var(--ink-2)">${esc(s.pin)}</td>
         <td class="r num"><span class="v">—</span><span class="sub"></span></td>
         <td class="muted">${esc(s.unit)}</td>
@@ -706,7 +955,6 @@ const build = {
         <td class="r num z">—</td>
         <td><div class="zbar" aria-hidden="true"><i></i></div></td>
       </tr>`).join("");
-    $("featNote").textContent = `window = last ${store.cfg.window} samples`;
   },
 
   scenarios() {
@@ -715,7 +963,7 @@ const build = {
   },
 
   scoreInfo() {
-    const c = store.cfg, sc = c.scorer, st = c.status;
+    const c = store.cfg, sc = c.scorer, st = c.status, pc = c.engineering.pump_curve;
     $("scoreInfoBody").innerHTML = `
       <p style="margin:6px 0">Computed on the Raspberry Pi 5 for every sample once the ${c.window}-sample window is full.
       The <b>demo scorer</b> stands in for Isolation Forest; it measures how far the live feature vector is from the healthy baseline,
@@ -725,10 +973,14 @@ D     = √( (1/12) · Σ clip(z_i, ±${sc.z_clip})² )
 score = 1 − exp( −(D / ${sc.d0})² )
 health = round((1 − score) × 100)</span>
       <p style="margin:6px 0">Bands: <b>HEALTHY</b> score &lt; ${st.warn} · <b>WARNING</b> ${st.warn}–${st.crit} · <b>CRITICAL</b> &gt; ${st.crit}.
-      A band change must persist ${st.debounce_samples} samples, and an alarm only clears once the score is ${st.deadband} below its threshold (deadband). Float LOW overrides to <b>DRY-RUN PROTECTION</b>;
-      RPM &lt; ${st.standby_rpm} is <b>STANDBY</b>; alarms are inhibited for ${st.startup_inhibit_s} s after a start.</p>
-      <p style="margin:6px 0">To use a trained model: <code>python tools/train_iforest.py logs/*.csv</code>, then start the backend with
-      <code>--model models/iforest.json</code>. The swap point is <code>load_scorer()</code> in <code>backend/scorer.py</code>.</p>`;
+      A band change must persist ${st.debounce_samples} samples, and an alarm only clears once the score is ${st.deadband} below its threshold (deadband).
+      Float LOW overrides to <b>DRY-RUN PROTECTION</b>; RPM &lt; ${st.standby_rpm} is <b>STANDBY</b>; alarms are inhibited for ${st.startup_inhibit_s} s after a start.</p>
+      <p style="margin:6px 0"><b>Diagnosis</b> ranks known faults by the cosine similarity between the z-vector and each fault's signature
+      (e.g. outlet restriction = flow↓ pressure↑ current↑). It is a transparent rule base, separate from the anomaly model.</p>
+      <p style="margin:6px 0"><b>Engineering values</b>: P<sub>hyd</sub> = Δp·Q, P<sub>in</sub> ≈ ${c.engineering.supply_v} V · I · ${c.engineering.power_factor} (PF, estimate),
+      η = P<sub>hyd</sub>/P<sub>in</sub>, pump curve H = ${pc.h0_bar}·(n/${pc.n0_rpm})² − ${pc.k_bar_per_lpm2}·Q² bar.</p>
+      <p style="margin:6px 0">Trained model: <code>python tools/train_iforest.py logs/*.csv</code>, then <code>--model models/iforest.json</code>.
+      The swap point is <code>load_scorer()</code> in <code>backend/scorer.py</code>.</p>`;
   },
 };
 
@@ -745,54 +997,58 @@ function arcPath(cx, cy, r, a0, a1) {
    ====================================================================== */
 const render = {
   all() { this.frame(); this.state(); this.alerts(); },
-  frame() { this.kpis(); this.trend(); this.sensors(); this.features(); this.pipeline(); this.topbar(); },
-  state() { this.controls(); this.pipeline(); this.topbar(); },
+  frame() {
+    this.kpis(); this.mimic(); this.diag(); drawTrend(); drawOpChart();
+    this.sensors(); this.features(); this.pipeline(); this.topbar();
+  },
+  state() { this.controls(); this.alarms(); this.edge(); this.pipeline(); this.topbar(); this.mimicMode(); },
 
   /* -------------------------------------------------------------- top bar */
   topbar() {
     const s = store.state, f = store.last, link = linkState();
-    // Overall status
     const pill = $("statusPill");
-    let label = f ? f.status : (store.wsOpen ? "WAITING" : "NO DATA");
-    let cls = f ? STATUS_CLASS[f.status] : "idle";
+    const cls = f ? STATUS_CLASS[f.status] : "idle";
     pill.className = `pill ${cls}` + (link.bad && f ? " stale" : "");
     pill.querySelector(".g").textContent = GLYPH[cls];
-    pill.querySelector(".t").textContent = label + (link.bad && f ? " (stale)" : "");
+    pill.querySelector(".t").textContent = (f ? f.status : (store.wsOpen ? "WAITING" : "NO DATA")) + (link.bad && f ? " (stale)" : "");
     pill.title = link.bad ? "Last known status — data stream is not fresh" : "Overall system status";
     document.body.classList.toggle("is-stale", link.bad && !!f);
 
-    // Source badge (always visible): SIMULATED DATA / LIVE DATA / REPLAY DATA / STALE / DISCONNECTED
     const sp = $("sourcePill");
     sp.className = `pill ${link.cls}`;
     sp.querySelector(".g").textContent = link.cls === "good" ? "●" : link.cls === "warn" ? "◆" : "■";
     sp.querySelector(".t").textContent = link.label;
     sp.title = s ? `${s.source.toUpperCase()} · ${s.source_detail}` : "No connection to the Pi backend";
 
-    // Pump state
     let pump = "—";
-    if (f) {
-      if (s?.sim?.tripped) pump = "TRIPPED · interlock";
-      else pump = f.running ? `RUNNING ${fmt(f.reading.rpm, 0, 4)} rpm` : "STOPPED";
-    }
+    if (f) pump = s?.sim?.tripped ? "TRIPPED · interlock" : f.running ? `RUNNING ${fmt(f.reading.rpm, 0, 4)} rpm` : "STOPPED";
     $("tbPump").textContent = pump;
     const dev = deviceText();
     $("tbDevice").textContent = dev;
     $("tbDevice").classList.toggle("searching", /searching|rescanning/.test(dev));
     $("tbStream").textContent = !store.wsOpen ? "OFFLINE" : s?.paused ? "PAUSED" : `RUNNING ${fmt(s?.msg_rate_hz ?? 0, 2)} Hz`;
     $("tbAge").textContent = link.age === null ? "—" : `${fmt(link.age, link.age < 100 ? 1 : 0, 5)} s ago`;
+
+    const sum = s?.alarm_summary, ap = $("almPill");
+    let acls = "idle", atxt = "NO ALARMS", blink = false;
+    if (sum?.high_unacked) { acls = "crit"; atxt = `${sum.unacked} UNACK ALARM${sum.unacked > 1 ? "S" : ""}`; blink = true; }
+    else if (sum?.unacked) { acls = "warn"; atxt = `${sum.unacked} UNACK ALARM${sum.unacked > 1 ? "S" : ""}`; }
+    else if (sum?.active) { acls = "warn"; atxt = `${sum.active} ACTIVE ALARM${sum.active > 1 ? "S" : ""}`; }
+    ap.className = `pill ${acls}${blink ? " blink" : ""}`;
+    ap.querySelector(".g").textContent = acls === "idle" ? "○" : "▲";
+    ap.querySelector(".t").textContent = atxt;
   },
 
   /* -------------------------------------------------------------- KPIs */
   kpis() {
     const f = store.last, frames = store.frames.slice(-UI.sparkLen), b = store.cfg.baseline;
-    // Gauge
     const tile = $("k-health"), health = f?.health ?? null;
     const hcls = f ? STATUS_CLASS[f.status] : "idle";
-    tile.className = `tile gauge-tile ${hcls}`;
+    tile.className = `tile ${hcls}`;
     setState(tile, hcls, f ? (f.status === "DRY-RUN PROTECTION" ? "DRY-RUN" : f.status) : "—");
     const arc = $("gaugeArc");
     arc.setAttribute("stroke-dashoffset", health === null ? 100 : 100 - health);
-    arc.setAttribute("stroke", `var(--${hcls === "idle" ? "idle" : hcls})`);
+    arc.setAttribute("stroke", `var(--${hcls})`);
     $("gaugeVal").textContent = health === null ? "—" : String(health).padStart(3, FS);
 
     for (const k of KPIS) {
@@ -800,8 +1056,8 @@ const render = {
       const el = $(`k-${k.id}`), v = f ? k.get(f) : null;
       let cls, lab;
       if (k.id === "score") {
-        cls = f && f.score !== null ? STATUS_CLASS[f.status] === "idle" ? "idle" : bandOf(f.score) : "idle";
-        lab = f?.score == null ? (f?.status === "STARTING" ? `WAIT ${fmt(f.inhibit_left_s, 0)}s` : "—") : cls === "good" ? "LOW" : cls === "warn" ? "ELEVATED" : "HIGH";
+        cls = f && f.score !== null && STATUS_CLASS[f.status] !== "idle" ? bandOf(f.score) : "idle";
+        lab = f?.score == null ? (f?.status === "STARTING" ? `WAIT ${fmt(f.inhibit_left_s, 0)}s` : "—") : cls === "good" ? "LOW" : cls === "warn" ? "ELEVATED" : cls === "crit" ? "HIGH" : "—";
         el.querySelector(".t-sub").textContent = f?.scorer?.distance !== undefined ? `D = ${fmt(f.scorer.distance, 2)}σ` : f?.scorer?.raw !== undefined ? `raw ${fmt(f.scorer.raw, 3)}` : " ";
       } else {
         cls = f ? f.channels[k.ch] : "idle";
@@ -812,16 +1068,108 @@ const render = {
       el.className = `tile ${cls}`;
       setState(el, cls, lab);
       el.querySelector(".v").textContent = fmt(v, k.dp, k.w);
-      const vals = frames.map(k.get);
-      const base = k.id === "score" ? null : b[k.base];
-      const [line, baseLine] = sparkPaths(vals, k.id === "score" ? [0, 1] : null, base);
+      const [line, baseLine] = sparkPaths(frames.map(k.get), k.id === "score" ? [0, 1] : null, k.id === "score" ? null : b[k.base]);
       el.querySelector(".line").setAttribute("d", line);
       el.querySelector(".base").setAttribute("d", baseLine);
     }
   },
 
-  /* -------------------------------------------------------------- trend chart */
-  trend() { drawTrend(); },
+  /* -------------------------------------------------------------- P&ID mimic */
+  mimic() {
+    const f = store.last, svg = $("mimic"), s = store.state;
+    const r = f?.reading, ch = f?.channels || {};
+    const ro = (id, v, cls) => {
+      const g = $(`ro-${id}`); g.querySelector(".v").textContent = v; g.setAttribute("class", `ro ${cls || "idle"}`);
+    };
+    ro("vib", r ? fmt(r.vib_rms, 3) : "—", ch.vib);
+    ro("rpm", r ? fmt(r.rpm, 0) : "—", ch.hall);
+    ro("current", r ? fmt(r.current_a, 2) : "—", ch.current);
+    ro("temp", r ? fmt(r.temp_c, 1) : "—", ch.temp);
+    ro("pressure", r ? fmt(r.pressure_bar, 2) : "—", ch.pressure);
+    ro("flow", r ? fmt(r.flow_lpm, 1) : "—", ch.flow);
+    const valve = s?.sim ? s.sim.valve_pct : null;
+    ro("valve", valve === null ? "n/a" : fmt(valve, 0), valve === null ? "idle" : valve >= 50 ? "warn" : "good");
+    const vf = $("mValveFill");
+    vf.setAttribute("opacity", valve ? 0.25 + 0.75 * valve / 100 : 0);
+
+    const flowing = !!r && r.flow_lpm > 0.3;
+    const tripped = !!s?.sim?.tripped;
+    svg.classList.toggle("flowing", flowing);
+    svg.classList.toggle("running", !!f?.running);
+    const pumpCls = !f ? "" : tripped || f.status === "DRY-RUN PROTECTION" ? "crit" : f.running ? (STATUS_CLASS[f.status] === "idle" ? "good" : STATUS_CLASS[f.status]) : "";
+    ["mPump", "mNozzle", "mMotor"].forEach((id) => $(id).setAttribute("class", `equip ${pumpCls}`));
+    $("mPumpState").textContent = !f ? "—" : tripped ? "TRIPPED" : f.running ? "RUNNING" : "STOPPED";
+
+    // Tank level: the float switch only says OK/LOW, so the fill is indicative.
+    const ok = !r || r.float === 1;
+    const top = ok ? 110 : 228;
+    $("mWater").setAttribute("y", top); $("mWater").setAttribute("height", 259 - top);
+    $("mWaterLine").setAttribute("y1", top); $("mWaterLine").setAttribute("y2", top);
+    const fl = $("mFloat");
+    fl.textContent = !r ? "—" : ok ? "LEVEL OK" : "LEVEL LOW";
+    fl.setAttribute("class", `state-t ${!r ? "idle" : ok ? "good" : "crit"}`);
+
+    const e = f?.eng;
+    $("mDutyQ").textContent = `Q ${e ? fmt(e.q_lpm, 1) : "—"} L/min`;
+    $("mDutyH").textContent = `H ${e ? fmt(e.head_m, 1) : "—"} m`;
+    $("mDutyP").textContent = `P ${e ? fmt(e.p_hyd_w, 0) : "—"} W hyd`;
+    $("mDutyE").textContent = `η ${e?.eff_pct != null ? fmt(e.eff_pct, 1) + " %" : "—"}`;
+  },
+  mimicMode() {
+    const s = store.state;
+    $("mimicMode").textContent = !s ? "—" : s.source === "sim" ? "simulated plant" : s.source === "replay" ? "replayed data" : "live plant";
+  },
+
+  /* -------------------------------------------------------------- diagnosis + engineering */
+  diag() {
+    const f = store.last, d = f?.diagnosis, card = $("diagCard");
+    let cls = "idle", label = "Waiting for data", meta = "", action = null, rank = [];
+    if (f) {
+      if (d) {
+        cls = d.fault === "dry_run" ? "crit" : STATUS_CLASS[f.status] === "idle" ? "warn" : STATUS_CLASS[f.status];
+        label = d.label;
+        meta = `Confidence <b class="num">${fmt(d.confidence * 100, 0)} %</b> · <span class="mono">${esc(d.basis)}</span>`;
+        action = d.action;
+        rank = d.ranking;
+      } else if (!f.running) {
+        label = f.status === "STANDBY" ? "Pump stopped" : "No diagnosis";
+        meta = "Diagnosis runs while the pump is running.";
+      } else if (f.status === "STARTING") {
+        label = "Start-up — alarm inhibit";
+        meta = `Window filling, scoring resumes in ${fmt(f.inhibit_left_s, 0)} s.`;
+      } else {
+        cls = "good"; label = "No fault detected";
+        meta = "All features within tolerance of the healthy baseline.";
+      }
+    }
+    card.className = `diag-card ${cls}`;
+    card.querySelector(".g").textContent = GLYPH[cls];
+    $("diagLabel").textContent = label;
+    $("diagMeta").innerHTML = meta;
+    $("diagAction").hidden = !action;
+    if (action) $("diagAction").querySelector("span").textContent = action;
+    $("diagRank").innerHTML = rank.length > 1 ? rank.map((x, i) => `
+      <li><span>${esc(x.label)}</span><div class="hbar"><i class="${i === 0 ? "top" : ""}" style="width:${(x.similarity * 100).toFixed(0)}%"></i></div><span class="num" style="text-align:right">${fmt(x.similarity * 100, 0)}%</span></li>`).join("") : "";
+
+    const e = f?.eng, t = f?.totals;
+    const row = (k, v, u, sub = "") => `<dt>${k}${sub ? ` <small>${sub}</small>` : ""}</dt><dd class="num">${v}<span class="u">${u}</span></dd>`;
+    $("engGrid").innerHTML = [
+      row("Hydraulic power", e ? fmt(e.p_hyd_w, 1) : "—", "W", "Δp·Q"),
+      row("Electrical input", e ? fmt(e.p_in_w, 0) : "—", "W", "est. V·I·PF"),
+      row("Wire-to-water η", e?.eff_pct != null ? fmt(e.eff_pct, 1) : "—", "%"),
+      row("Pump head", e ? fmt(e.head_m, 1) : "—", "m"),
+      row("Specific energy", e?.spec_energy_wh_m3 != null ? fmt(e.spec_energy_wh_m3, 0) : "—", "Wh/m³"),
+      row("Motor slip", e?.slip_pct != null ? fmt(e.slip_pct, 2) : "—", "%", e ? `n_sync ${e.n_sync_rpm}` : ""),
+      row("Vibration crest factor", e?.crest != null ? fmt(e.crest, 2) : "—", ""),
+      row("Pump-curve deviation", e?.curve_dev_bar != null ? (e.curve_dev_bar >= 0 ? "+" : "−") + fmt(Math.abs(e.curve_dev_bar), 2) : "—", "bar"),
+    ].join("");
+    $("totGrid").innerHTML = [
+      row("Run time", t ? dur(t.run_s) : "—", ""),
+      row("Starts", t ? t.starts : "—", ""),
+      row("Energy", t ? fmt(t.energy_wh / 1000, 3) : "—", "kWh"),
+      row("Volume pumped", t ? fmt(t.pumped_l, 1) : "—", "L"),
+    ].join("");
+  },
 
   /* -------------------------------------------------------------- sensors table */
   sensors() {
@@ -864,8 +1212,8 @@ const render = {
       bar.className = az >= store.cfg.status.channel_z_crit ? "crit" : az >= store.cfg.status.channel_z_warn ? "warn" : "";
     }
     const fill = f ? f.window_fill : 0;
-    $("featNote").textContent = `window ${fill}/${store.cfg.window} samples` + (f && !f.features ? (f.running ? " · filling" : " · pump stopped") : "");
-    $("scorerTag").textContent = store.state?.scorer?.kind === "iforest" ? "Isolation Forest (trained)" : "Demo scorer · stand-in for Isolation Forest";
+    $("featNote").textContent = `window ${fill}/${store.cfg.window}` + (f && !f.features ? (f.running ? " · filling" : " · pump stopped") : "");
+    $("scorerTag").textContent = store.state?.scorer?.kind === "iforest" ? "Isolation Forest (trained)" : "Demo scorer · IF stand-in";
   },
 
   /* -------------------------------------------------------------- pipeline */
@@ -876,13 +1224,11 @@ const render = {
     const dot = (id, cls, pulse) => { $(`nd-${id}`).className = `dot ${cls}${pulse ? " pulse" : ""}`; };
     const fresh = !link.bad;
 
-    // Sensors
     const ch = f ? Object.values(f.channels) : [];
     const nBad = ch.filter((x) => x === "warn" || x === "crit").length;
     dot("sensors", !f ? "idle" : ch.includes("crit") ? "crit" : nBad ? "warn" : f.running ? "good" : "idle");
     dl("sensors", [["channels", f ? `${ch.length - nBad} ok · ${nBad} dev` : "—"], ["float", f ? (f.reading.float ? "OK" : "LOW") : "—"]]);
 
-    // ESP32 / transport
     dot("esp32", link.cls, fresh && f);
     dl("esp32", [
       ["link", s ? (s.mode === "auto" && s.source === "sim" ? "sim · scanning USB" : s.source === "sim" ? "simulated" : s.source === "replay" ? "replay" : deviceText()) : "—"],
@@ -890,7 +1236,6 @@ const render = {
       ["seq", f?.reading.seq ?? f?.reading.ts ?? "—"],
     ]);
 
-    // Pi preprocessing
     dot("pi", !c ? "idle" : c.invalid || c.dropped ? "warn" : fresh ? "good" : "idle");
     dl("pi", [
       ["valid", c ? c.valid : "—"],
@@ -898,20 +1243,19 @@ const render = {
       ["window", f ? `${f.window_fill}/${store.cfg.window} · 12 feat` : "—"],
     ]);
 
-    // Model
     const sc = f?.score ?? null;
     dot("model", sc === null ? "idle" : bandOf(sc));
-    dl("model", [["model", s?.scorer?.kind === "iforest" ? "IF (trained)" : "demo (IF stand-in)"], ["score", fmt(sc, 3)]]);
+    dl("model", [["model", s?.scorer?.kind === "iforest" ? "IF (trained)" : "demo (IF stand-in)"], ["score", fmt(sc, 3)],
+      ["latency", f?.proc_ms != null ? `${fmt(f.proc_ms, 2)} ms` : "—"]]);
 
-    // Health
     const hc = f ? STATUS_CLASS[f.status] : "idle";
     dot("health", hc);
     dl("health", [["index", f?.health ?? "—"], ["status", f ? f.status.replace(" PROTECTION", "") : "—"]]);
 
-    // HMI
-    const nCrit = store.alerts.filter((a) => a.sev === "crit").length;
-    dot("hmi", store.wsOpen ? (nCrit && hc === "crit" ? "crit" : "good") : "crit");
-    dl("hmi", [["socket", store.wsOpen ? "open" : "closed"], ["alerts", `${store.alerts.length} (${nCrit} crit)`], ["CSV", s?.logging?.enabled ? "logging" : "off"]]);
+    const sum = s?.alarm_summary;
+    dot("hmi", !store.wsOpen ? "crit" : sum?.high_unacked ? "crit" : sum?.unacked ? "warn" : "good");
+    dl("hmi", [["socket", store.wsOpen ? `open · ${s?.clients ?? 0} client(s)` : "closed"],
+      ["alarms", sum ? `${sum.active} act · ${sum.unacked} unack` : "—"], ["CSV", s?.logging?.enabled ? "logging" : "off"]]);
 
     document.querySelectorAll(".node").forEach((n, i) => n.classList.toggle("flow", fresh && !!f && i < 5));
   },
@@ -979,14 +1323,49 @@ const render = {
     $("lastInvalid").textContent = c.last_invalid ? `last reject: ${c.last_invalid.reason} ${c.last_invalid.detail}  ·  ${reasons}` : "";
   },
 
-  /* -------------------------------------------------------------- alerts */
+  /* -------------------------------------------------------------- alarm list */
+  alarms() {
+    const s = store.state; if (!s) return;
+    const list = s.alarms || [], sum = s.alarm_summary;
+    $("almSummary").textContent = `${sum.active} active · ${sum.unacked} unacknowledged`;
+    $("ackAll").disabled = !sum.unacked;
+    $("almBody").innerHTML = list.length ? list.map((a) => {
+      const state = a.active ? (a.acked ? "ACTIVE · ACK" : "ACTIVE · UNACK") : "RTN · UNACK";
+      const blink = a.active && !a.acked && a.priority === "HIGH";
+      return `<tr class="alm-row ${a.acked ? "" : "unack"} ${a.active ? "" : "rtn"} ${a.priority}${blink ? " blink" : ""}">
+        <td class="num">${hhmmss(a.t_in)}</td><td class="tagc">${esc(a.tag)}</td><td>${esc(a.desc)}</td>
+        <td><span class="prio ${a.priority}">${a.priority}</span></td><td class="alm-state">${state}</td>
+        <td class="r num hide-sm">${a.value ?? "—"}</td>
+        <td class="r">${a.acked ? "" : `<button class="ack-btn" data-ack="${esc(a.tag)}" type="button">ACK</button>`}</td></tr>`;
+    }).join("") : `<tr><td colspan="7" class="alm-empty">No active or unacknowledged alarms.</td></tr>`;
+  },
+
+  /* -------------------------------------------------------------- event log */
   alerts() {
     const list = store.alerts;
     const n = (sev) => list.filter((a) => a.sev === sev).length;
-    $("alertCounts").textContent = `${n("crit")} crit · ${n("warn")} warn · ${n("info")} info`;
+    $("alertCounts").textContent = `· ${n("crit")} crit · ${n("warn")} warn · ${n("info")} info`;
     $("alertList").innerHTML = list.length ? list.map((a) => `
       <li class="${a.sev}"><span class="time num">${hhmmss(a.t)}</span><span class="sev">${a.sev === "crit" ? "✕ CRIT" : a.sev === "warn" ? "▲ WARN" : "● INFO"}</span><span class="msg">${esc(a.msg)}</span></li>`).join("")
-      : `<li class="empty">No alerts yet.</li>`;
+      : `<li class="empty">No events yet.</li>`;
+  },
+
+  /* -------------------------------------------------------------- edge node */
+  edge() {
+    const e = store.state?.edge; if (!e) return;
+    $("edgeHost").textContent = `${e.host} · ${e.os}`;
+    const row = (k, v, u = "") => `<dt>${k}</dt><dd class="num">${v}<span class="u">${u}</span></dd>`;
+    $("edgeGrid").innerHTML = [
+      row("Uptime", dur(e.uptime_s)),
+      row("CPU load", e.cpu_pct != null ? fmt(e.cpu_pct, 0) : "n/a", e.cpu_pct != null ? "%" : ""),
+      row("Load average (1 min)", e.load1 != null ? fmt(e.load1, 2) : "n/a"),
+      row("Memory used", e.mem_pct != null ? fmt(e.mem_pct, 0) : "n/a", e.mem_pct != null ? "%" : ""),
+      row("SoC temperature", e.cpu_temp_c != null ? fmt(e.cpu_temp_c, 1) : "n/a", e.cpu_temp_c != null ? "°C" : ""),
+      row("Pipeline latency avg / max", e.proc_ms_avg != null ? `${fmt(e.proc_ms_avg, 2)} / ${fmt(e.proc_ms_max, 2)}` : "—", "ms"),
+      row("Data quality (valid / received)", e.quality_pct != null ? fmt(e.quality_pct, 1) : "—", "%"),
+      row("Scorer", esc(store.state.scorer.name.replace(" (standardised distance)", ""))),
+      row("Python", e.python),
+    ].join("");
   },
 };
 
@@ -1036,9 +1415,9 @@ function sparkPaths(vals, fixed, base) {
 }
 
 /* ======================================================================
-   TREND CHART (hand-rolled SVG)
+   TREND CHART (hand-rolled SVG): single metric or stacked strip charts
    ====================================================================== */
-const chart = { w: 600, h: 280, hover: null, m: { l: 50, r: 62, t: 14, b: 30 } };
+const chart = { w: 600, h: 280, hover: null, m: { l: 50, r: 62, t: 14, b: 30 }, rows: null };
 
 function niceTicks(lo, hi, count = 5) {
   const span = hi - lo, raw = span / count, mag = 10 ** Math.floor(Math.log10(raw));
@@ -1048,62 +1427,10 @@ function niceTicks(lo, hi, count = 5) {
   return { ticks, step };
 }
 
-function drawTrend() {
-  const svg = $("chart");
-  if (!store.cfg) return;
-  const M = METRICS[store.metric], frames = store.frames, n = UI.trendLen;
-  const W = chart.w = svg.clientWidth || 600, H = chart.h = svg.clientHeight || 280, m = chart.m;
-  const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const vals = frames.map(M.get);
-  const nums = vals.filter((v) => v !== null && v !== undefined);
-  const base = M.base ? store.cfg.baseline[M.base] : null;
-
-  let lo, hi;
-  if (M.fixed) [lo, hi] = M.fixed;
-  else {
-    lo = Math.min(...nums, base); hi = Math.max(...nums, base);
-    const pad = Math.max((hi - lo) * 0.15, Math.abs(base || 1) * 0.02);
-    lo -= pad; hi += pad;
-    if (lo < 0 && Math.min(...nums, 0) >= 0) lo = 0;
-  }
-  const { ticks } = niceTicks(lo, hi, ph < 180 ? 4 : 5);
-  if (!M.fixed) { lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]); }
-  const off = n - vals.length;
-  const X = (i) => m.l + ((i + off) / (n - 1)) * pw;
-  const Y = (v) => m.t + ph - ((v - lo) / (hi - lo)) * ph;
-  chart.X = X; chart.Y = Y; chart.vals = vals; chart.off = off;
-
-  const dt = store.cfg.link.expected_interval_s;
-  let g = `<g class="grid">`;
-  ticks.forEach((t) => { g += `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>`; });
-  const xt = [0, 30, 60, 90, 119];
-  xt.forEach((s) => { const x = m.l + (s / (n - 1)) * pw; g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${m.t}" y2="${m.t + ph}"/>`; });
-  g += `</g><g class="axis">`;
-  const tdp = Math.max(0, -Math.floor(Math.log10((ticks[1] - ticks[0]) || 1)) + (((ticks[1] - ticks[0]) / 10 ** Math.floor(Math.log10(ticks[1] - ticks[0] || 1))) % 1 ? 1 : 0));
-  ticks.forEach((t) => { g += `<text x="${m.l - 6}" y="${(Y(t) + 3.5).toFixed(1)}" text-anchor="end">${t.toFixed(Math.min(tdp, 3))}</text>`; });
-  xt.forEach((s) => {
-    const x = m.l + (s / (n - 1)) * pw, ago = Math.round((n - 1 - s) * dt);
-    g += `<text x="${x.toFixed(1)}" y="${H - m.b + 16}" text-anchor="${s === 0 ? "start" : s === 119 ? "end" : "middle"}">${ago ? `−${ago} s` : "now"}</text>`;
-  });
-  g += `<text class="axis-title" x="${m.l}" y="${m.t - 4}" text-anchor="start" style="display:none"></text></g>`;
-  g += `<text class="axis-title" transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">${esc(M.label)}${M.unit ? ` (${M.unit})` : ""}</text>`;
-
-  // Thresholds / baseline
-  if (M.thresholds) {
-    const st = store.cfg.status;
-    g += `<line class="th-warn" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.warn)}" y2="${Y(st.warn)}"/>`;
-    g += `<line class="th-crit" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.crit)}" y2="${Y(st.crit)}"/>`;
-    g += `<text class="th-label" x="${m.l + 4}" y="${Y(st.warn) - 4}">▲ WARN ${st.warn.toFixed(2)}</text>`;
-    g += `<text class="th-label" x="${m.l + 4}" y="${Y(st.crit) - 4}">✕ CRIT ${st.crit.toFixed(2)}</text>`;
-  } else if (base !== null) {
-    g += `<line class="base" x1="${m.l}" x2="${m.l + pw}" y1="${Y(base)}" y2="${Y(base)}"/>`;
-    g += `<text class="th-label" x="${m.l + 4}" y="${Y(base) - 4}">baseline ${fmt(base, M.dp)}</text>`;
-  }
-
-  // Series (gaps where value is null, e.g. score while pump is stopped)
+function seriesPath(vals, X, Y, lo, hi, baseY) {
   let d = "", area = "", seg = [];
   const flush = () => {
-    if (seg.length > 1) area += `M${seg[0][0]} ${m.t + ph}` + seg.map(([x, y]) => `L${x} ${y}`).join("") + `L${seg[seg.length - 1][0]} ${m.t + ph}Z`;
+    if (seg.length > 1 && baseY !== undefined) area += `M${seg[0][0]} ${baseY}` + seg.map(([x, y]) => `L${x} ${y}`).join("") + `L${seg[seg.length - 1][0]} ${baseY}Z`;
     seg = [];
   };
   vals.forEach((v, i) => {
@@ -1112,52 +1439,168 @@ function drawTrend() {
     d += `${seg.length ? "L" : "M"}${x} ${y}`; seg.push([x, y]);
   });
   flush();
-  g += `<path class="area" d="${area}"/><path class="series" d="${d}"/>`;
+  return { d, area };
+}
 
-  // Endpoint marker
+function xAxis(m, pw, H, n) {
+  const dt = store.cfg.link.expected_interval_s;
+  let g = "";
+  [0, 30, 60, 90, 119].forEach((s) => {
+    const x = m.l + (s / (n - 1)) * pw, ago = Math.round((n - 1 - s) * dt);
+    g += `<text class="tick" x="${x.toFixed(1)}" y="${H - 10}" text-anchor="${s === 0 ? "start" : s === 119 ? "end" : "middle"}">${ago ? `−${ago} s` : "now"}</text>`;
+  });
+  return g;
+}
+
+function drawTrend() {
+  if (!store.cfg) return;
+  const svg = $("chart");
+  if (store.metric === "all") return drawStrips(svg);
+  svg.style.height = "";
+  chart.rows = null;
+  const M = METRICS[store.metric], frames = store.frames, n = UI.trendLen;
+  const W = chart.w = svg.clientWidth || 600, H = chart.h = svg.clientHeight || 280, m = chart.m = { l: 50, r: 62, t: 14, b: 30 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const vals = frames.map(M.get), nums = vals.filter((v) => v !== null && v !== undefined);
+  const base = M.base ? store.cfg.baseline[M.base] : null;
+  let lo, hi;
+  if (M.fixed) [lo, hi] = M.fixed;
+  else {
+    lo = Math.min(...nums, base); hi = Math.max(...nums, base);
+    const pad = Math.max((hi - lo) * 0.15, Math.abs(base || 1) * 0.02);
+    lo -= pad; hi += pad;
+    if (lo < 0 && Math.min(...nums, 0) >= 0) lo = 0;
+  }
+  const { ticks, step } = niceTicks(lo, hi, ph < 180 ? 4 : 5);
+  if (!M.fixed) { lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]); }
+  const off = n - vals.length;
+  const X = (i) => m.l + ((i + off) / (n - 1)) * pw;
+  const Y = (v) => m.t + ph - ((v - lo) / (hi - lo)) * ph;
+  chart.X = X; chart.off = off;
+
+  let g = `<g class="grid">`;
+  ticks.forEach((t) => { g += `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>`; });
+  [0, 30, 60, 90, 119].forEach((s) => { const x = m.l + (s / (n - 1)) * pw; g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${m.t}" y2="${m.t + ph}"/>`; });
+  g += `</g><g class="axis">`;
+  const tdp = clamp(-Math.floor(Math.log10(step) + 1e-9) + (step / 10 ** Math.floor(Math.log10(step) + 1e-9) % 1 ? 1 : 0), 0, 3);
+  ticks.forEach((t) => { g += `<text x="${m.l - 6}" y="${(Y(t) + 3.5).toFixed(1)}" text-anchor="end">${t.toFixed(tdp)}</text>`; });
+  g += xAxis(m, pw, H, n) + `</g>`;
+  g += `<text class="axis-title" transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">${M.tag} ${esc(M.label)}${M.unit ? ` (${M.unit})` : ""}</text>`;
+
+  if (M.thresholds) {
+    const st = store.cfg.status;
+    g += `<line class="th-warn" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.warn)}" y2="${Y(st.warn)}"/>`;
+    g += `<line class="th-crit" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.crit)}" y2="${Y(st.crit)}"/>`;
+    g += `<text class="th-label" x="${m.l + 4}" y="${Y(st.warn) - 4}">▲ HI ${st.warn.toFixed(2)}</text>`;
+    g += `<text class="th-label" x="${m.l + 4}" y="${Y(st.crit) - 4}">✕ HIHI ${st.crit.toFixed(2)}</text>`;
+  } else if (base !== null) {
+    g += `<line class="base" x1="${m.l}" x2="${m.l + pw}" y1="${Y(base)}" y2="${Y(base)}"/>`;
+    g += `<text class="th-label" x="${m.l + 4}" y="${Y(base) - 4}">baseline ${fmt(base, M.dp)}</text>`;
+  }
+  const { d, area } = seriesPath(vals, X, Y, lo, hi, m.t + ph);
+  g += `<path class="area" d="${area}"/><path class="series" d="${d}"/>`;
   const li = vals.length - 1, lv = vals[li];
   if (lv !== null && lv !== undefined) {
     const ex = X(li), ey = Y(clamp(lv, lo, hi));
-    g += `<circle class="end" cx="${ex}" cy="${ey}" r="4.5"/>`;
-    g += `<text class="end-label" x="${ex + 8}" y="${ey + 4}">${fmt(lv, M.dp)}</text>`;
+    g += `<circle class="end" cx="${ex}" cy="${ey}" r="4.5"/><text class="end-label" x="${ex + 8}" y="${ey + 4}">${fmt(lv, M.dp)}</text>`;
   }
-  if (!nums.length) {
-    g += `<text class="empty" x="${m.l + pw / 2}" y="${m.t + ph / 2}" text-anchor="middle">${frames.length ? "No value — pump stopped or window filling" : "Waiting for data…"}</text>`;
-  }
-
-  // Hover layer
+  if (!nums.length) g += `<text class="empty" x="${m.l + pw / 2}" y="${m.t + ph / 2}" text-anchor="middle">${frames.length ? "No value — pump stopped or window filling" : "Waiting for data…"}</text>`;
   if (chart.hover !== null && vals[chart.hover] !== undefined) {
     const i = chart.hover, x = X(i), v = vals[i];
     g += `<line class="cross" x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t + ph}"/>`;
     if (v !== null) g += `<circle class="hover-dot" cx="${x}" cy="${Y(clamp(v, lo, hi))}" r="4"/>`;
   }
-  g += `<rect id="hit" x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="transparent"/>`;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.innerHTML = g;
   svg.setAttribute("aria-label", `${M.label} trend, last ${frames.length} samples, latest ${fmt(lv, M.dp)} ${M.unit}`);
   updateTip();
 
-  // Meta strip
-  const last = nums.length ? nums[nums.length - 1] : null;
   const mn = nums.length ? Math.min(...nums) : null, mx = nums.length ? Math.max(...nums) : null;
   const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-  $("trendTitle").textContent = `${M.label}${M.unit ? ` · ${M.unit}` : ""} · ${frames.length}/${n} samples`;
-  $("trendMeta").innerHTML = [["last", last], ["min", mn], ["max", mx], ["mean", avg]]
+  $("trendTitle").textContent = `${M.tag} ${M.label}${M.unit ? ` · ${M.unit}` : ""} · ${frames.length}/${n} samples`;
+  $("trendMeta").innerHTML = [["last", nums.length ? nums[nums.length - 1] : null], ["min", mn], ["max", mx], ["mean", avg]]
     .map(([k, v]) => `<span>${k} <span class="num">${fmt(v, M.dp)}</span></span>`).join("") +
     (base !== null ? `<span>baseline <span class="num">${fmt(base, M.dp)}</span></span>` : "");
+}
+
+/** Stacked strip charts (chart-recorder style): one row per channel, shared time axis and crosshair. */
+function drawStrips(svg) {
+  const frames = store.frames, n = UI.trendLen, rowsDef = STRIP_ORDER.map((k) => ({ k, ...METRICS[k] }));
+  const narrow = (svg.clientWidth || 600) < 520;
+  const rowH = narrow ? 40 : 46, gap = 6, top = 6, bottom = 24;
+  const H = top + rowsDef.length * (rowH + gap) + bottom;
+  svg.style.height = `${H}px`;
+  const W = chart.w = svg.clientWidth || 600, m = chart.m = { l: 50, r: 62, t: top, b: bottom };
+  chart.h = H;
+  const pw = W - m.l - m.r, off = n - frames.length;
+  const X = (i) => m.l + ((i + off) / (n - 1)) * pw;
+  chart.X = X; chart.off = off; chart.rows = [];
+  let g = `<g class="grid">`;
+  [0, 30, 60, 90, 119].forEach((s) => { const x = m.l + (s / (n - 1)) * pw; g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${top}" y2="${H - bottom}"/>`; });
+  g += `</g>`;
+  rowsDef.forEach((M, ri) => {
+    const y0 = top + ri * (rowH + gap), y1 = y0 + rowH;
+    const vals = frames.map(M.get), nums = vals.filter((v) => v !== null && v !== undefined);
+    const base = M.base ? store.cfg.baseline[M.base] : null;
+    let lo, hi;
+    if (M.fixed) [lo, hi] = M.fixed;
+    else {
+      lo = Math.min(...nums, base); hi = Math.max(...nums, base);
+      const pad = Math.max((hi - lo) * 0.12, Math.abs(base || 1) * 0.02);
+      lo -= pad; hi += pad;
+    }
+    const Y = (v) => y1 - ((v - lo) / (hi - lo)) * rowH;
+    chart.rows.push({ M, Y, lo, hi });
+    g += `<line class="row-sep" x1="${m.l}" x2="${m.l + pw}" y1="${y1}" y2="${y1}"/>`;
+    g += `<text class="tick" x="${m.l - 6}" y="${y0 + 9}" text-anchor="end">${fmt(hi, M.dp > 2 ? 2 : M.dp)}</text>`;
+    g += `<text class="tick" x="${m.l - 6}" y="${y1 - 1}" text-anchor="end">${fmt(lo, M.dp > 2 ? 2 : M.dp)}</text>`;
+    if (M.thresholds) {
+      const st = store.cfg.status;
+      g += `<line class="th-warn" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.warn)}" y2="${Y(st.warn)}"/><line class="th-crit" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.crit)}" y2="${Y(st.crit)}"/>`;
+    } else if (base !== null) {
+      g += `<line class="base" x1="${m.l}" x2="${m.l + pw}" y1="${Y(base)}" y2="${Y(base)}"/>`;
+    }
+    const { d } = seriesPath(vals, X, Y, lo, hi);
+    g += `<path class="series thin" d="${d}"/>`;
+    g += `<text class="row-label" x="${m.l + 5}" y="${y0 + 11}">${M.tag} · ${esc(M.label)}${M.unit ? ` (${M.unit})` : ""}</text>`;
+    const lv = vals[vals.length - 1];
+    if (lv !== null && lv !== undefined) {
+      g += `<circle class="end" cx="${X(vals.length - 1)}" cy="${Y(clamp(lv, lo, hi))}" r="3"/>`;
+      g += `<text class="end-label" x="${m.l + pw + 8}" y="${(y0 + y1) / 2 + 4}">${fmt(lv, M.dp)}</text>`;
+    }
+  });
+  g += xAxis(m, pw, H, n);
+  if (chart.hover !== null && frames[chart.hover]) {
+    const i = chart.hover, x = X(i);
+    g += `<line class="cross" x1="${x}" x2="${x}" y1="${top}" y2="${H - bottom}"/>`;
+    chart.rows.forEach(({ M, Y, lo, hi }) => { const v = M.get(frames[i]); if (v !== null && v !== undefined) g += `<circle class="hover-dot" cx="${x}" cy="${Y(clamp(v, lo, hi))}" r="3"/>`; });
+  }
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = g;
+  svg.setAttribute("aria-label", `Strip charts of all channels, last ${frames.length} samples`);
+  updateTip();
+  $("trendTitle").textContent = `all channels · ${frames.length}/${n} samples · shared time axis`;
+  $("trendMeta").innerHTML = `<span>dashed = baseline · amber/red = score HI/HIHI · hover for values at one instant</span>`;
 }
 
 function updateTip() {
   const tip = $("tip"), i = chart.hover;
   const f = i === null ? null : store.frames[i];
   if (!f) { tip.style.display = "none"; return; }
-  const M = METRICS[store.metric], v = M.get(f);
-  tip.innerHTML = `<span class="num muted">${hhmmss(f.t)}</span><br><b class="num">${fmt(v, M.dp)}</b> ${M.unit} <span class="muted">· ${esc(f.status)}</span>`;
+  if (store.metric === "all") {
+    tip.innerHTML = `<span class="num muted">${hhmmss(f.t)} · ${esc(f.status)}</span><table>` + STRIP_ORDER.map((k) => {
+      const M = METRICS[k], v = M.get(f);
+      return `<tr><td class="muted">${M.tag}</td><td>${M.label}</td><td class="num" style="text-align:right"><b>${fmt(v, M.dp)}</b></td><td class="muted">${M.unit}</td></tr>`;
+    }).join("") + `</table>`;
+  } else {
+    const M = METRICS[store.metric], v = M.get(f);
+    tip.innerHTML = `<span class="num muted">${hhmmss(f.t)}</span><br><b class="num">${fmt(v, M.dp)}</b> ${M.unit} <span class="muted">· ${esc(f.status)}</span>`;
+  }
   tip.style.display = "block";
   const wrap = $("chartWrap").getBoundingClientRect(), svgR = $("chart").getBoundingClientRect();
   const x = chart.X(i) * (svgR.width / chart.w) + (svgR.left - wrap.left);
   const tw = tip.offsetWidth;
-  tip.style.left = `${clamp(x + 12, 4, wrap.width - tw - 4)}px`;
+  tip.style.left = `${x + 14 + tw > wrap.width - 4 ? x - tw - 14 : x + 14}px`;
   tip.style.top = `14px`;
 }
 
@@ -1169,6 +1612,70 @@ function onChartMove(ev) {
   const slot = Math.round(((xv - m.l) / pw) * (n - 1));
   chart.hover = clamp(slot - chart.off, 0, store.frames.length - 1);
   drawTrend();
+}
+
+/* ======================================================================
+   OPERATING POINT CHART: outlet pressure vs flow on the pump curve
+   ====================================================================== */
+function drawOpChart() {
+  if (!store.cfg) return;
+  const svg = $("opChart"), pc = store.cfg.engineering.pump_curve, b = store.cfg.baseline;
+  const W = svg.clientWidth || 400, H = svg.clientHeight || 260, m = { l: 44, r: 14, t: 12, b: 34 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const qMax = pc.q_max_lpm, pMax = Math.ceil(pc.h0_bar * 1.15 + 0.5);
+  const X = (q) => m.l + (q / qMax) * pw, Y = (p) => m.t + ph - (p / pMax) * ph;
+  const curve = (n) => {
+    let d = "";
+    for (let q = 0; q <= qMax; q += qMax / 60) {
+      const h = pc.h0_bar * (n / pc.n0_rpm) ** 2 - pc.k_bar_per_lpm2 * q * q;
+      if (h < 0) break;
+      d += `${d ? "L" : "M"}${X(q).toFixed(1)} ${Y(h).toFixed(1)}`;
+    }
+    return d;
+  };
+  let g = `<g class="grid">`;
+  const qt = niceTicks(0, qMax, W < 360 ? 4 : 6).ticks, pt = niceTicks(0, pMax, 5).ticks;
+  qt.forEach((q) => { g += `<line x1="${X(q)}" x2="${X(q)}" y1="${m.t}" y2="${m.t + ph}"/>`; });
+  pt.forEach((p) => { g += `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(p)}" y2="${Y(p)}"/>`; });
+  g += `</g><g class="axis">`;
+  qt.forEach((q) => { g += `<text x="${X(q)}" y="${m.t + ph + 14}" text-anchor="middle">${q}</text>`; });
+  pt.forEach((p) => { g += `<text x="${m.l - 6}" y="${Y(p) + 3.5}" text-anchor="end">${p}</text>`; });
+  g += `</g><text class="axis-title" x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle">FT-101 flow Q (L/min)</text>`;
+  g += `<text class="axis-title" transform="translate(11 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">PT-101 pressure (bar)</text>`;
+
+  const f = store.last;
+  g += `<path class="ref" d="${curve(pc.n0_rpm)}"/>`;
+  const qLab = Math.min(qMax * 0.62, Math.sqrt(pc.h0_bar * 0.45 / pc.k_bar_per_lpm2));
+  g += `<text class="th-label" x="${X(qLab) + 4}" y="${Y(pc.h0_bar - pc.k_bar_per_lpm2 * qLab * qLab) - 6}">pump curve @ ${pc.n0_rpm} rpm</text>`;
+  const nNow = f?.running ? (f.features?.rpm_mean ?? f.reading.rpm) : null;
+  if (nNow && Math.abs(nNow - pc.n0_rpm) / pc.n0_rpm > 0.02) {
+    g += `<path class="ref dash" d="${curve(nNow)}"/>`;
+  }
+  // design point (healthy baseline)
+  g += `<circle class="design" cx="${X(b.flow_lpm)}" cy="${Y(b.pressure_bar)}" r="6"/>`;
+  g += `<text class="th-label" x="${X(b.flow_lpm) + 9}" y="${Y(b.pressure_bar) + 14}">design point</text>`;
+
+  // trail + live point (window means when available)
+  const pts = store.frames.slice(-UI.trailLen).filter((x) => x.running && x.eng).map((x) => [x.eng.q_lpm, x.eng.p_bar]);
+  pts.forEach(([q, p], i) => {
+    const a = 0.1 + 0.6 * (i / Math.max(1, pts.length - 1));
+    g += `<circle class="trail" cx="${X(clamp(q, 0, qMax)).toFixed(1)}" cy="${Y(clamp(p, 0, pMax)).toFixed(1)}" r="2" opacity="${a.toFixed(2)}"/>`;
+  });
+  if (f?.eng && f.running) {
+    const q = clamp(f.eng.q_lpm, 0, qMax), p = clamp(f.eng.p_bar, 0, pMax);
+    g += `<circle class="end" cx="${X(q)}" cy="${Y(p)}" r="6"/>`;
+    g += `<text class="end-label" x="${X(q) + (X(q) > W - 110 ? -10 : 10)}" y="${Y(p) - 9}" text-anchor="${X(q) > W - 110 ? "end" : "start"}">${fmt(f.eng.q_lpm, 1)} L/min · ${fmt(f.eng.p_bar, 2)} bar</text>`;
+  } else {
+    g += `<text class="empty" x="${m.l + pw / 2}" y="${m.t + ph / 2}" text-anchor="middle">${f ? "Pump stopped" : "Waiting for data…"}</text>`;
+  }
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = g;
+  const e = f?.eng;
+  $("opMeta").innerHTML = e ? [
+    ["Q", fmt(e.q_lpm, 1), "L/min"], ["p", fmt(e.p_bar, 2), "bar"], ["curve", e.curve_bar != null ? fmt(e.curve_bar, 2) : "—", "bar"],
+    ["Δ", e.curve_dev_bar != null ? (e.curve_dev_bar >= 0 ? "+" : "−") + fmt(Math.abs(e.curve_dev_bar), 2) : "—", "bar"],
+  ].map(([k, v, u]) => `<span>${k} <span class="num">${v}</span> ${u}</span>`).join("") +
+    `<span>left of curve → restriction · below → speed loss / cavitation</span>` : "";
 }
 
 /* ======================================================================
@@ -1185,7 +1692,8 @@ function wire() {
   const svg = $("chart");
   svg.addEventListener("pointermove", onChartMove);
   svg.addEventListener("pointerleave", () => { chart.hover = null; drawTrend(); });
-  new ResizeObserver(() => drawTrend()).observe($("chartWrap"));
+  new ResizeObserver(() => { drawTrend(); drawOpChart(); }).observe($("chartWrap"));
+  new ResizeObserver(() => drawOpChart()).observe($("oppt"));
 
   $("srcSel").addEventListener("change", (e) => transport.send("set_source", e.target.value));
   $("replaySel").addEventListener("change", (e) => transport.send("set_replay_file", e.target.value));
@@ -1203,6 +1711,9 @@ function wire() {
   $("pauseBtn").addEventListener("click", () => transport.send("set_paused", !store.state?.paused));
   $("logChk").addEventListener("change", (e) => transport.send("set_logging", e.target.checked));
   $("resetCnt").addEventListener("click", () => transport.send("reset_counters", true));
+  $("ackAll").addEventListener("click", () => transport.send("ack_all", true));
+  $("almBody").addEventListener("click", (e) => { const b = e.target.closest("[data-ack]"); if (b) transport.send("ack_alarm", b.dataset.ack); });
+  $("almPill").addEventListener("click", () => $("alarms").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
 
   $("themeBtn").addEventListener("click", () => {
     const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -1211,7 +1722,6 @@ function wire() {
   });
   try { const t = localStorage.getItem("phc-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
 
-  // Clock + link age (1 Hz is enough for both).
   const tick = () => {
     const d = new Date();
     $("tbClock").textContent = d.toLocaleTimeString([], { hour12: false });

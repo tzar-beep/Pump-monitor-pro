@@ -86,14 +86,19 @@ It is deep-merged over `CONFIG`:
 
 | Section | What it shows |
 |---|---|
-| Top bar | Overall status (HEALTHY / WARNING / CRITICAL / DRY-RUN PROTECTION / STANDBY / STARTING), pump state, stream state and rate, time since the last valid message, clock. The **source badge is always visible**: `LIVE DATA` (green), `SIMULATED DATA` / `REPLAY DATA` (amber), `STALE n s` / `DISCONNECTED` (red). |
-| KPI row | Health-index gauge, anomaly score and the six physical channels. Each tile has a value, unit, baseline delta and a 60-sample sparkline. The tile colour comes from the channel's state (the largest \|z\| among its features), not from the accent colour. |
-| Pipeline | Sensors → ESP32 → Pi 5 → Isolation Forest → Health index → HMI. Each node shows its live state: channel health, link and rate, valid/invalid/dropped counts, window fill, score, alert count and CSV state. |
-| Trend | Current, flow, pressure, temperature, vibration or anomaly score over a rolling 120-sample window, with WARN/CRIT threshold lines (score) or a baseline (physical channels), an endpoint marker and a hover crosshair. |
-| Controls | Source selector, scenario cards with expected signatures, valve slider (0–100 % closed), pump start/stop, stream pause, CSV logging toggle with the file path, and message counters (received / valid / invalid / dropped / skipped, plus reject reasons). |
-| Sensors | One row per sensor: ESP32 channel, live reading, unit, valid range, status, and the ML features it feeds. The float switch is marked as a safety interlock, not an ML input. |
-| Feature vector | The 12 window features with value, healthy baseline, tolerance σ, z-score and a deviation bar. Expand the row below the table to see the scoring formula. |
-| Alerts | Status transitions, float LOW/restored, link STALE/restored, source and command events. Newest first, coloured by severity, each with a text label. |
+| Top bar | Overall status (HEALTHY / WARNING / CRITICAL / DRY-RUN PROTECTION / STANDBY / STARTING), an **alarm pill** (flashes while a HIGH-priority alarm is unacknowledged; click it to jump to the list), pump state, detected USB device, stream rate, time since the last valid message, clock. The **source badge is always visible**: `LIVE DATA` (green), `SIMULATED DATA` / `REPLAY DATA` (amber), `STALE n s` / `DISCONNECTED` (red). |
+| KPI row | Health-index gauge, anomaly score (AI-101) and the six physical channels, each with its instrument tag, unit, baseline delta and a 60-sample sparkline. The tile colour comes from the channel's state (the largest \|z\| among its features), never from the accent colour. |
+| Process schematic | A P&ID of the rig: sump T-101 with low-level switch LSL-101, pump P-101 with motor M-101, discharge line with PT-101, FT-101 and hand valve HV-101, and instrument bubbles for VT/ST/IT/TT-101. Live readouts sit next to each instrument, with a border coloured by channel state. Pipes animate while water flows, the impeller spins while the pump runs, the pump goes red on a fault or trip, the tank level follows the float switch, and a duty-point block shows Q, head, hydraulic power and efficiency. |
+| Diagnosis | Which fault most likely explains the anomaly: outlet restriction, imbalance, overload, cavitation or dry run. Shows a confidence, the strongest feature deviations, a **recommended action**, and every hypothesis ranked. It uses rule-based signature matching (cosine similarity of the z-vector against each fault's signature) and is labelled that way. |
+| Engineering values | Hydraulic power (Δp·Q), estimated electrical input (V·I·PF), wire-to-water efficiency, pump head, specific energy (Wh/m³), motor slip, vibration crest factor and deviation from the pump curve. Session totals: run time, starts, kWh, litres pumped. |
+| Trend | **All channels** (default): stacked strip charts, one row per channel with a shared time axis, like a chart recorder, and a single crosshair whose tooltip lists every value at that instant. Or a single metric with grid, axis labels, HI/HIHI threshold lines (score) or baseline, and an endpoint marker. |
+| Operating point | Outlet pressure vs flow drawn on the pump curve H = h0·(n/n0)² − k·Q², with the design point, a 60-sample trail, and the curve redrawn at the actual speed (affinity law). A restriction pushes the point left and up the curve; overload or cavitation drop it below. |
+| Edge node | The Pi itself: uptime, CPU %, load average, memory, SoC temperature, pipeline latency per message (avg/max), data quality (valid/received), scorer, Python version. |
+| Pipeline | Sensors → ESP32 → Pi 5 → Isolation Forest → Health index → HMI. Each node shows its live state: channel health, link and rate, valid/invalid/dropped counts, window fill, score and **inference latency**, and alarm counts. |
+| Alarms | Alarm management in the ISA-18.2 style. **Active alarm list**: tag (AI-101.HI / AI-101.HIHI, LSL-101.LO, FT/PT/IT/TT/ST/VT-101.DEV, COMM-101.FAIL), priority, state (ACTIVE·UNACK, ACTIVE·ACK, RTN·UNACK), value, and **ACK** / **ACK ALL**. Alarm state lives on the Pi, so every connected screen sees the same list. Next to it is the **event log** of status changes, float events, link loss and recovery, operator ACKs and commands. |
+| Controls | Source selector (Auto / Sim / Serial / MQTT / Replay) with the USB scan list, scenario cards with expected signatures, valve slider, pump start/stop, stream pause, CSV logging with the file path, and message counters. |
+| Sensors | One row per instrument: tag, part, ESP32 channel, live reading, unit, valid range, status, and the ML features it feeds. The float switch is marked as a safety interlock, not an ML input. |
+| Feature vector | The 12 window features with value, healthy baseline, tolerance σ, z-score and a deviation bar. The section below explains the score, diagnosis and engineering formulas. |
 
 ## What is simulated
 
@@ -189,6 +194,24 @@ Messages that fail any check are rejected, not fed to the model, and counted by 
 (`missing`, `type`, `range`, `parse`, `not_json`, `ts_order`, `too_long`).
 The per-sample vibration RMS is √((x² + y² + z²)/3).
 
+### Flashing the ESP32 (automated)
+
+Plug the ESP32 into USB, then run **`flash.bat`** (Windows, double-click) or
+`python tools/flash_esp32.py` (any OS). The script does the rest:
+
+1. installs the ESP32 board package and the OneWire / DallasTemperature libraries for
+   `arduino-cli` if they're missing (one time, about 400 MB);
+2. compiles the sketch and finds the board on USB;
+3. if the dashboard is running in auto mode it holds the port, so the script briefly switches it
+   to the simulator to release the port, and switches it back afterwards;
+4. uploads, retrying once at a slower baud;
+5. reads the board's output and validates it with the same schema the Pi uses. It prints
+   `OK: 3 valid pump messages`, or tells you plainly which sensor isn't wired.
+
+Options: `--port COM5`, `--fqbn esp32:esp32:esp32s3` (other board), `--compile-only`, `--verify-only`.
+Needs `arduino-cli` on PATH (`winget install ArduinoSA.CLI` on Windows; on Linux/Pi,
+`curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh`).
+
 **Firmware:** [`firmware/esp32_pump_node/esp32_pump_node.ino`](firmware/esp32_pump_node/esp32_pump_node.ino)
 (Arduino framework, libraries OneWire and DallasTemperature). It samples the ADXL345, ACS712 and
 pressure input at 400 Hz, counts flow and Hall pulses in interrupts, reads the DS18B20
@@ -216,7 +239,7 @@ without blocking, and prints one line per second. Pins:
 
 | Test | Command | What it checks |
 |---|---|---|
-| Scenario logic (headless) | `python -m tools.scenario_check -v` | Drives every scenario, the valve at 20/40/70 %, stop/start and dry run through the real `Processor`, and asserts the final status of each step plus the alerts |
+| Scenario logic (headless) | `python -m tools.scenario_check -v` | Drives every scenario, the valve at 20/40/70 %, stop/start and dry run through the real `Processor` and `AlarmManager`. Asserts the final status and the **diagnosis** of each fault, and unit-tests the alarm state machine (raise → ACK → RTN → cleared) |
 | Plug-and-play, any OS | `python tools/test_autodetect.py` | Starts in auto mode with nothing attached, then plugs in a fake ESP32, unplugs it and plugs it back in. Asserts: simulator while waiting, scan reasons listed, automatic switch to LIVE (about 2 s), DISCONNECTED on unplug with no fallback to simulated data, banners, and automatic reconnect |
 | Live path, any OS | `python tools/test_e2e.py` | Fake ESP32 on TCP → pyserial `socket://` URL → the real `SerialSource` → WebSocket client. Injects bad lines, sequence gaps and a 9 s stall, and asserts rejection counts, LIVE → STALE → reconnect → LIVE, the CSV log, and replay of that log |
 | Live path over a real pty (Pi/Linux) | `sudo apt install socat && ./tools/test_live_path.sh` | `socat` creates a virtual serial pair. `fake_esp32.py` writes to `/tmp/ttyESP32` and the backend reads `/tmp/ttyPI`, as it would read `/dev/ttyUSB0`. Extra flags pass through, e.g. `--scenario imbalance --stall-after 30` |
@@ -257,7 +280,13 @@ COM pair, install com0com and run `fake_esp32.py --port COM6` with `--serial-por
     (`valve.cur_k`, `blockage.current_add`). Flip the sign if the rig shows the opposite.
 12. **Thresholds**: stale after 3 s without a valid message, the serial port is reopened after 6 s of silence,
     startup inhibit is 8 s, debounce 2 samples, deadband 0.08.
-13. **Isolation Forest calibration**: `CRIT_FACTOR = 1.8` in `train_iforest.py` was chosen on simulated
+13. **Engineering values**: electrical input is *estimated* as 230 V × I × 0.8 PF (single-phase AC
+    assumed). Outlet gauge pressure is taken as the pump's Δp (suction at atmospheric). The pump curve
+    (h0 = 3.75 bar, k = 0.00458 bar/(L/min)²) is fitted to the brief's duty point. Measure the shut-off
+    pressure and one more point on the rig and update `CONFIG["engineering"]`.
+14. **Diagnosis signatures** (`CONFIG["diagnosis"]`) are engineering rules of thumb. Check them against
+    logged fault runs; the restriction signature uses Current ↑ as the brief does (see 11).
+15. **Isolation Forest calibration**: `CRIT_FACTOR = 1.8` in `train_iforest.py` was chosen on simulated
     faults. Re-check it with `replay_eval.py` once real fault runs have been logged.
 
 ## Layout
@@ -265,13 +294,14 @@ COM pair, install com0com and run `fake_esp32.py --port COM6` with `--serial-por
 ```
 backend/   config.py (all constants) · schema.py (validation) · simulator.py · features.py
            scorer.py (demo + Isolation Forest, load_scorer hook) · processor.py (window/score/status/alerts)
+           analytics.py (engineering values, fault diagnosis) · alarms.py (ISA-18.2 style alarm states)
            sources.py (auto / sim / serial / mqtt / replay) · csvlog.py · server.py (FastAPI + WebSocket) · __main__.py
 web/       index.html: the HMI. Plain HTML/CSS/JS, no build step, hand-drawn SVG charts
 firmware/  esp32_pump_node/esp32_pump_node.ino
-tools/     scenario_check.py · test_autodetect.py · test_e2e.py · test_live_path.sh · fake_esp32.py
+tools/     flash_esp32.py · scenario_check.py · test_autodetect.py · test_e2e.py · test_live_path.sh · fake_esp32.py
            replay_eval.py · train_iforest.py · make_sample_csv.py
 deploy/    install_pi.sh (Pi setup + boot service + kiosk) · pump-console.service · kiosk.sh
-start.bat  Windows one-click launcher
+start.bat  Windows one-click launcher · flash.bat  one-click ESP32 flashing
 data/      sample_session.csv  (simulated session for replay/training demos)
 models/    iforest.json        (demo model trained on simulated data)
 logs/      CSV session logs (git-ignored)

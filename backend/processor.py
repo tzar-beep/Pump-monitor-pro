@@ -7,6 +7,7 @@ tools/replay_eval.py and in the headless scenario test.
 import itertools
 from datetime import datetime, timezone
 
+from .analytics import diagnose, engineering
 from .features import Window
 from .schema import Invalid, parse_line
 from .scorer import standardise
@@ -57,6 +58,9 @@ class Processor:
     def reset_counters(self):
         self.counters = {"received": 0, "valid": 0, "invalid": 0, "dropped": 0,
                          "skipped": 0, "invalid_by_reason": {}, "last_invalid": None}
+        # Session totals (reset with the counters, not on a source switch).
+        self.totals = {"run_s": 0.0, "starts": 0, "energy_wh": 0.0, "pumped_l": 0.0}
+        self._prev_run_ts = None
 
     # ------------------------------------------------------------------ ingest
     def ingest(self, line, now):
@@ -113,6 +117,7 @@ class Processor:
         if running and not self.running:
             self.start_ts = r["ts"]
             self.window.clear()
+            self.totals["starts"] += 1
         if not running:
             self.window.clear()
             self.band = None
@@ -127,6 +132,14 @@ class Processor:
                 z = standardise(features, self.cfg["features"])
                 score, extras = self.scorer.score(features)
                 health = round((1.0 - score) * 100)
+
+        eng = engineering(r, features, running, self.cfg)
+        if running and self._prev_run_ts is not None and 0 < r["ts"] - self._prev_run_ts <= 5000:
+            dt = (r["ts"] - self._prev_run_ts) / 1000.0
+            self.totals["run_s"] += dt
+            self.totals["energy_wh"] += eng["p_in_w"] * dt / 3600.0
+            self.totals["pumped_l"] += r["flow_lpm"] * dt / 60.0
+        self._prev_run_ts = r["ts"] if running else None
 
         inhibited = running and (r["ts"] - self.start_ts) < st["startup_inhibit_s"] * 1000
         if r["float"] == 0:
@@ -144,6 +157,7 @@ class Processor:
             self.status = status
 
         self.frame_no += 1
+        diag = diagnose(z, r, status, self.cfg)
         return {
             "type": "frame", "n": self.frame_no, "t": now,
             "reading": r, "running": running,
@@ -153,6 +167,9 @@ class Processor:
             "inhibit_left_s": max(0.0, st["startup_inhibit_s"] - (r["ts"] - self.start_ts) / 1000) if inhibited else 0,
             "channels": self._channel_states(r, z, running),
             "scorer": extras,
+            "eng": eng,
+            "diagnosis": diag,
+            "totals": {k: round(v, 3) for k, v in self.totals.items()},
         }
 
     def _band(self, score, latched=None):

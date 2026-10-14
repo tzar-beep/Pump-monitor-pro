@@ -4,3 +4,4 @@ __pycache__/
 logs/*.csv
 config.local.json
 .claude/
+build/

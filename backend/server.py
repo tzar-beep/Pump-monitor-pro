@@ -11,12 +11,14 @@ import contextlib
 import glob
 import json
 import os
+import platform
 import time
 from collections import deque
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 
+from .alarms import AlarmManager
 from .config import SENSORS
 from .csvlog import CsvLogger
 from .processor import Processor, make_alert
@@ -42,6 +44,15 @@ class Hub:
             cfg["scorer"]["model_path"] = rel(cfg["scorer"]["model_path"])
         self.scorer = load_scorer(cfg)
         self.processor = Processor(cfg, self.scorer, SENSORS)
+        self.alarm_mgr = AlarmManager(cfg, SENSORS)
+        self.proc_ms = deque(maxlen=300)
+        self.started = time.time()
+        try:
+            import psutil
+            psutil.cpu_percent(interval=None)        # prime the CPU counter
+            self.psutil = psutil
+        except ImportError:
+            self.psutil = None
         self.sim = Simulator(cfg)
         self.logger = CsvLogger(rel(cfg["logging"]["dir"]))
         self.clients = set()
@@ -98,6 +109,7 @@ class Hub:
         self.mode = kind
         self.cfg["source"] = kind
         self.processor.reset()
+        self.alarm_mgr.clear()
         self.last_valid = None
         self.was_fresh = False
         self.rx_times.clear()
@@ -110,6 +122,7 @@ class Hub:
     async def _went_live(self, ser):
         """Auto mode: the first valid ESP32 message arrived. Drop the simulated history."""
         self.processor.reset()
+        self.alarm_mgr.clear()
         self.history.clear()
         self.rx_times.clear()
         self.last_valid = None
@@ -135,10 +148,14 @@ class Hub:
             self.processor.counters["skipped"] += 1
             return
         now = time.time()
+        t0 = time.perf_counter()
         res = self.processor.ingest(line, now)
         if not res["ok"]:
             return
         frame = res["frame"]
+        events = self.alarm_mgr.evaluate(self.alarm_mgr.frame_conditions(frame), now)
+        self.proc_ms.append((time.perf_counter() - t0) * 1000.0)
+        frame["proc_ms"] = round(self.proc_ms[-1], 3)
         self.last_valid = now
         self.rx_times.append(now)
         self.history.append(frame)
@@ -146,6 +163,11 @@ class Hub:
         await self.broadcast(frame)
         for a in res["alerts"]:
             await self._alert(a)
+        for kind, al in events:
+            if al["tag"].endswith(".DEV") and kind == "raise":
+                await self._alert(make_alert(now, "warn", f"ALARM {al['tag']} — {al['desc']} (|z| {al['value']})"))
+        if events:
+            await self.broadcast(self.state(now))
 
     async def _alert(self, a):
         self.alerts.append(a)
@@ -179,6 +201,8 @@ class Hub:
                     await self._alert(a)
             self.was_fresh = self.was_fresh or fresh
             self.link = link
+            lost = self.source.live and link in ("stale", "disconnected") and self.was_fresh
+            self.alarm_mgr.evaluate({"COMM-101.FAIL": (lost, "ESP32 communication lost", "HIGH", None)}, now)
             await self.broadcast(self.state(now))
 
     # ------------------------------------------------------------------ messages
@@ -206,7 +230,38 @@ class Hub:
             "counters": self.processor.counters,
             "scorer": {"name": self.scorer.name, "kind": self.scorer.kind},
             "clients": len(self.clients),
+            "alarms": self.alarm_mgr.listing(),
+            "alarm_summary": self.alarm_mgr.summary(),
+            "edge": self.edge_stats(now),
         }
+
+    def edge_stats(self, now):
+        """Health of the edge node itself (the Pi): load, memory, SoC temperature, processing latency."""
+        ms = list(self.proc_ms)
+        c = self.processor.counters
+        d = {"host": platform.node(), "os": f"{platform.system()} {platform.machine()}",
+             "python": platform.python_version(), "uptime_s": round(now - self.started),
+             "proc_ms_avg": round(sum(ms) / len(ms), 3) if ms else None,
+             "proc_ms_max": round(max(ms), 3) if ms else None,
+             "quality_pct": round(100.0 * c["valid"] / c["received"], 1) if c["received"] else None,
+             "cpu_pct": None, "mem_pct": None, "cpu_temp_c": None, "load1": None}
+        if hasattr(os, "getloadavg"):
+            d["load1"] = round(os.getloadavg()[0], 2)
+        if self.psutil:
+            d["cpu_pct"] = self.psutil.cpu_percent(interval=None)
+            d["mem_pct"] = self.psutil.virtual_memory().percent
+            temps = getattr(self.psutil, "sensors_temperatures", lambda: {})() or {}
+            for key in ("cpu_thermal", "coretemp", "k10temp", "soc_thermal"):
+                if temps.get(key):
+                    d["cpu_temp_c"] = temps[key][0].current
+                    break
+        if d["cpu_temp_c"] is None:
+            try:                                   # Raspberry Pi without psutil
+                with open("/sys/class/thermal/thermal_zone0/temp") as fh:
+                    d["cpu_temp_c"] = int(fh.read()) / 1000.0
+            except OSError:
+                pass
+        return d
 
     def _serial_info(self):
         ser = getattr(self.source, "serial", self.source)
@@ -226,6 +281,8 @@ class Hub:
                 "scenarios": {k: {"label": v["label"], "signature": v["signature"]}
                               for k, v in c["simulator"]["scenarios"].items()},
                 "link": c["link"], "history_keep": c["history_keep"],
+                "engineering": c["engineering"],
+                "faults": {k: v["label"] for k, v in c["diagnosis"]["faults"].items()},
             },
             "history": list(self.history),
             "alerts": list(self.alerts),
@@ -286,6 +343,10 @@ class Hub:
                 await self.set_source("replay")
         elif cmd == "reset_counters":
             self.processor.reset_counters()
+        elif cmd in ("ack_alarm", "ack_all"):
+            done = self.alarm_mgr.ack(None if cmd == "ack_all" else str(val))
+            if done:
+                await self._alert(make_alert(time.time(), "info", f"Operator ACK: {', '.join(done)}"))
         else:
             raise ValueError(f"unknown command {cmd!r}")
         await self.broadcast(self.state())

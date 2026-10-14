@@ -11,6 +11,7 @@ Anomaly scorers. Every scorer maps an ordered feature dict to a score in [0, 1].
 import json
 import math
 import os
+import struct
 
 
 def standardise(features, feat_cfg):
@@ -40,6 +41,11 @@ class DemoScorer:
         zc = [max(-self.z_clip, min(self.z_clip, v)) for v in z.values()]
         d = math.sqrt(sum(v * v for v in zc) / len(zc))
         return 1.0 - math.exp(-(d / self.d0) ** 2), {"distance": d}
+
+
+def _f32(v):
+    """Round to float32: scikit-learn trees compare features as float32, so must we."""
+    return struct.unpack("f", struct.pack("f", v))[0]
 
 
 def _c(n):
@@ -78,6 +84,7 @@ class IsolationForestScorer:
         self.name = f"Isolation Forest ({os.path.basename(path)}, {len(self.trees)} trees)"
 
     def raw(self, x):
+        x = [_f32(v) for v in x]
         total = 0.0
         for t in self.trees:
             node, depth = 0, 0
