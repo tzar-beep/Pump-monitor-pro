@@ -22,8 +22,10 @@ def deep_merge(base, over):
 def main():
     ap = argparse.ArgumentParser(description="Pump Health Console — edge backend")
     ap.add_argument("--config", help="JSON file deep-merged over backend/config.py")
-    ap.add_argument("--source", choices=["sim", "serial", "mqtt", "replay"])
-    ap.add_argument("--serial-port")
+    ap.add_argument("--source", choices=["auto", "sim", "serial", "mqtt", "replay"])
+    ap.add_argument("--serial-port", help='"auto" (default) or e.g. /dev/ttyUSB0, COM5, socket://host:port')
+    ap.add_argument("--probe", action="append", default=[], help="extra port/URL for the auto-scan to probe (repeatable)")
+    ap.add_argument("--no-sim-fallback", action="store_true", help="auto mode: show nothing until an ESP32 is found")
     ap.add_argument("--baud", type=int)
     ap.add_argument("--mqtt-host")
     ap.add_argument("--mqtt-topic")
@@ -43,6 +45,9 @@ def main():
     cfg["source"] = a.source or env("PUMP_SOURCE") or cfg["source"]
     cfg["serial"]["port"] = a.serial_port or env("PUMP_SERIAL_PORT") or cfg["serial"]["port"]
     cfg["serial"]["baud"] = a.baud or cfg["serial"]["baud"]
+    cfg["serial"]["extra_candidates"] = cfg["serial"]["extra_candidates"] + a.probe
+    if a.no_sim_fallback:
+        cfg["auto"]["fallback_sim"] = False
     cfg["mqtt"]["host"] = a.mqtt_host or env("PUMP_MQTT_HOST") or cfg["mqtt"]["host"]
     cfg["mqtt"]["topic"] = a.mqtt_topic or cfg["mqtt"]["topic"]
     cfg["replay"]["file"] = a.replay_file or cfg["replay"]["file"]

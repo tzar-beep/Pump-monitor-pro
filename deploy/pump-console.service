@@ -1,0 +1,20 @@
+# Installed by deploy/install_pi.sh (placeholders are filled in there).
+[Unit]
+Description=Pump Health Console (edge backend + dashboard on :8000)
+After=network.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+SupplementaryGroups=dialout
+WorkingDirectory=__APP_DIR__
+# Default source is "auto": simulator until an ESP32 appears on USB, then LIVE.
+# Add flags here, e.g. --log to record every session, --model models/iforest.json,
+# or --no-sim-fallback to show nothing until real hardware is connected.
+ExecStart=__APP_DIR__/.venv/bin/python -m backend
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

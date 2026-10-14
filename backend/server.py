@@ -22,11 +22,11 @@ from .csvlog import CsvLogger
 from .processor import Processor, make_alert
 from .scorer import DemoScorer, load_scorer
 from .simulator import Simulator
-from .sources import MqttSource, ReplaySource, SerialSource, SimSource
+from .sources import AutoSource, MqttSource, ReplaySource, SerialSource, SimSource
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web", "index.html")
-SOURCES = ("sim", "serial", "mqtt", "replay")
+SOURCES = ("auto", "sim", "serial", "mqtt", "replay")
 LINK_LABEL = {"sim": "SIMULATED", "replay": "REPLAY", "live": "LIVE", "stale": "STALE",
               "disconnected": "DISCONNECTED", "paused": "PAUSED"}
 
@@ -49,6 +49,7 @@ class Hub:
         self.alerts = deque(maxlen=cfg["alerts_keep"])
         self.paused = False
         self.source = None
+        self.mode = cfg["source"]
         self.task = None
         self.last_valid = None
         self.link = None
@@ -72,6 +73,9 @@ class Hub:
         self.logger.stop()
 
     def _make_source(self, kind):
+        if kind == "auto":
+            return AutoSource(self.cfg, self.sim, lambda: self.paused, self._went_live,
+                              fallback_sim=self.cfg["auto"]["fallback_sim"])
         if kind == "sim":
             return SimSource(self.cfg, self.sim, lambda: self.paused)
         if kind == "serial":
@@ -91,6 +95,7 @@ class Hub:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self.task
         self.source = new
+        self.mode = kind
         self.cfg["source"] = kind
         self.processor.reset()
         self.last_valid = None
@@ -101,6 +106,20 @@ class Hub:
         if announce:
             await self._alert(make_alert(time.time(), "info", f"Source switched to {kind.upper()} ({new.detail})"))
             await self.broadcast(self.hello())
+
+    async def _went_live(self, ser):
+        """Auto mode: the first valid ESP32 message arrived. Drop the simulated history."""
+        self.processor.reset()
+        self.history.clear()
+        self.rx_times.clear()
+        self.last_valid = None
+        self.paused = False
+        if self.logger.enabled:
+            self.logger.start("serial")          # keep real data in its own CSV
+        a = make_alert(time.time(), "info", f"ESP32 detected on {ser.port} ({ser.device}) — LIVE data")
+        a["toast"] = "good"
+        await self._alert(a)
+        await self.broadcast(self.hello())
 
     async def _run_source(self, src):
         try:
@@ -149,10 +168,15 @@ class Hub:
             link = self._link_state(now)
             fresh = link in ("sim", "replay", "live")
             if link != self.link:
+                a = None
                 if link in ("stale", "disconnected") and self.link in ("sim", "replay", "live"):
-                    await self._alert(make_alert(now, "warn", f"Data stream {LINK_LABEL[link]} ({self.source.detail})"))
+                    a = make_alert(now, "warn", f"Data stream {LINK_LABEL[link]} ({self.source.detail})")
+                    a["toast"] = "crit" if self.source.live else None
                 elif fresh and self.link in ("stale", "disconnected") and self.was_fresh:
-                    await self._alert(make_alert(now, "info", f"Data stream restored ({LINK_LABEL[link]})"))
+                    a = make_alert(now, "info", f"Data stream restored ({LINK_LABEL[link]}, {self.source.detail})")
+                    a["toast"] = "good" if self.source.live else None
+                if a:
+                    await self._alert(a)
             self.was_fresh = self.was_fresh or fresh
             self.link = link
             await self.broadcast(self.state(now))
@@ -166,7 +190,9 @@ class Hub:
             rate = (len(self.rx_times) - 1) / max(1e-6, self.rx_times[-1] - self.rx_times[0])
         return {
             "type": "state", "t": now,
+            "mode": self.mode,
             "source": src.kind, "source_detail": src.detail, "source_live": src.live,
+            "serial": self._serial_info(),
             "source_connected": src.connected, "source_error": src.error,
             "link": self._link_state(now),
             "last_valid_age_s": None if self.last_valid is None else round(now - self.last_valid, 1),
@@ -181,6 +207,13 @@ class Hub:
             "scorer": {"name": self.scorer.name, "kind": self.scorer.kind},
             "clients": len(self.clients),
         }
+
+    def _serial_info(self):
+        ser = getattr(self.source, "serial", self.source)
+        if not isinstance(ser, SerialSource):
+            return None
+        return {"auto": ser.auto, "port": ser.port, "device": ser.device, "scan": ser.scan,
+                "connected": ser.connected, "error": ser.error, "baud": ser.baud}
 
     def hello(self):
         c = self.cfg

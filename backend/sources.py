@@ -43,32 +43,131 @@ class SimSource:
             await emit(self.sim.line(self.period))
 
 
+# USB-serial bridges found on ESP32 boards. Unknown USB VIDs are still probed, after these.
+USB_BRIDGES = {0x10C4: "CP210x", 0x1A86: "CH340/CH9102", 0x0403: "FTDI", 0x303A: "ESP32 native USB",
+               0x2341: "Arduino", 0x239A: "Adafruit"}
+
+
 class SerialSource:
-    """USB serial via pyserial, in a reader thread. Reconnects on error and on a stalled stream."""
+    """
+    USB serial via pyserial, in a reader thread. Reconnects on error and on a stalled stream.
+
+    port = "auto": each scan lists the USB serial ports (ports without a USB VID, such as
+    Bluetooth or legacy UARTs, are skipped: opening them can hang or upset other devices),
+    opens each one and keeps the first that sends a line passing full message validation.
+    The last good port is tried first, so a replug reconnects in one probe, and a port the
+    OS renamed (ttyUSB0 -> ttyUSB1, COM5 -> COM7) is found on the next scan.
+    """
     kind, live = "serial", True
 
     def __init__(self, cfg):
         sc = cfg["serial"]
-        self.port, self.baud = sc["port"], sc["baud"]
+        self.cfg = cfg
+        self.auto = str(sc["port"]).lower() == "auto"
+        self.port = None if self.auto else sc["port"]
+        self.baud = sc["baud"]
         self.timeout = sc["read_timeout_s"]
         self.reconnect = sc["reconnect_delay_s"]
         self.max_line = sc["max_line_bytes"]
+        self.probe_s = sc.get("probe_timeout_s", 4.0)
+        self.extra = list(sc.get("extra_candidates") or [])
         self.stall_s = cfg["link"]["stale_after_s"] * 2
-        self.detail = f"{self.port} @ {self.baud} 8N1"
+        self.device = None          # bridge name when auto-detected, e.g. "CP210x"
+        self.scan = []              # last scan results: [{"port", "desc", "result"}]
         self.connected, self.error = False, None
         self._stop = threading.Event()
 
+    @property
+    def detail(self):
+        if self.auto and not self.port:
+            return f"auto-detect · scanning USB serial ports @ {self.baud}"
+        how = f" · auto-detected {self.device}" if self.auto else ""
+        return f"{self.port} @ {self.baud} 8N1{how}"
+
+    # ------------------------------------------------------------ auto-detection
+    def candidates(self):
+        try:
+            from serial.tools import list_ports
+            found = [(p.device, USB_BRIDGES.get(p.vid, p.description or "USB serial"), p.vid in USB_BRIDGES)
+                     for p in list_ports.comports() if p.vid is not None]
+        except Exception:
+            found = []
+        found.sort(key=lambda c: (c[0] != self.port, not c[2], c[0]))   # last good port, then known bridges
+        return [(dev, desc) for dev, desc, _ in found] + [(url, "extra candidate") for url in self.extra]
+
+    def _probe(self, dev):
+        """Open dev and wait for one valid message. Returns (serial, first_line, rest) or (None, reason, None)."""
+        import serial
+        from .schema import Invalid, parse_line
+        try:
+            ser = serial.serial_for_url(dev, baudrate=self.baud, timeout=0.3)
+        except Exception as e:
+            msg = str(e)
+            if "Permission denied" in msg or "Errno 13" in msg:
+                return None, "permission denied: run  sudo usermod -aG dialout $USER  and log in again", None
+            if "Access is denied" in msg or "PermissionError" in msg or "busy" in msg.lower():
+                return None, "port busy: close Arduino Serial Monitor / other serial programs", None
+            if "socket://" in dev:
+                return None, "not reachable", None
+            return None, f"cannot open: {msg[:70]}", None
+        buf, got_bytes = b"", False
+        deadline = time.monotonic() + self.probe_s    # the ESP32 resets when the port opens; allow for boot
+        try:
+            while time.monotonic() < deadline and not self._stop.is_set():
+                chunk = ser.read(ser.in_waiting or 1)
+                if not chunk:
+                    continue
+                got_bytes, buf = True, buf + chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    try:
+                        parse_line(line, self.cfg)
+                    except Invalid:
+                        continue                   # boot chatter, "# ready" lines, half lines
+                    return ser, line, buf
+                if len(buf) > self.max_line:
+                    buf = b""
+        except Exception as e:
+            ser.close()
+            return None, f"read error ({str(e)[:50]})", None
+        ser.close()
+        if not got_bytes:
+            return None, "silent: no data (firmware flashed? sensors wired?)", None
+        return None, "sends data, but not valid pump JSON (wrong firmware or baud?)", None
+
+    def _open(self):
+        """Returns (serial, already-read first line or None, leftover buffer)."""
+        import serial
+        if not self.auto:
+            return serial.serial_for_url(self.port, baudrate=self.baud, timeout=self.timeout), None, b""
+        results = []
+        for dev, desc in self.candidates():
+            if self._stop.is_set():
+                break
+            ser, first, rest = self._probe(dev)
+            if ser:
+                ser.timeout = self.timeout
+                results.append({"port": dev, "desc": desc, "result": "ESP32 pump node ✓"})
+                self.scan, self.port, self.device = results, dev, desc
+                return ser, first, rest
+            results.append({"port": dev, "desc": desc, "result": first})
+        self.scan = results
+        raise IOError("no ESP32 found on USB" if results else "no USB serial ports present: plug in the ESP32")
+
+    # ------------------------------------------------------------ reader
     def _reader(self, loop, q):
-        import serial  # pyserial
         while not self._stop.is_set():
             try:
-                ser = serial.serial_for_url(self.port, baudrate=self.baud, timeout=self.timeout)
+                ser, first, buf = self._open()
             except Exception as e:  # SerialException, OSError, ValueError for bad URLs
-                self.connected, self.error = False, f"open failed: {e}"
+                self.connected = False
+                self.error = str(e) if self.auto else f"open failed: {e}"
                 self._stop.wait(self.reconnect)
                 continue
             self.connected, self.error = True, None
-            buf, last_rx = b"", time.monotonic()
+            if first:
+                loop.call_soon_threadsafe(q.put_nowait, first)
+            last_rx = time.monotonic()
             try:
                 while not self._stop.is_set():
                     chunk = ser.read(ser.in_waiting or 1)
@@ -102,6 +201,58 @@ class SerialSource:
                 await emit(await q.get())
         finally:
             self._stop.set()
+
+
+class AutoSource:
+    """
+    Plug-and-play mode (the default). Runs the simulator as a clearly labelled fallback
+    while SerialSource(port="auto") scans USB. The first valid ESP32 message stops the
+    simulator for good and awaits on_live(serial_source); from then on only the real
+    device feeds the pipeline. If the device is unplugged later the link goes
+    DISCONNECTED - it never silently reverts to simulated data - and reconnects on replug.
+    """
+
+    def __init__(self, cfg, sim, is_paused, on_live, fallback_sim=True):
+        self.serial = SerialSource(cfg)
+        self.simsrc = SimSource(cfg, sim, is_paused) if fallback_sim else None
+        self.on_live = on_live
+        self.is_live = not fallback_sim
+
+    @property
+    def kind(self):
+        return "serial" if self.is_live else "sim"
+
+    @property
+    def live(self):
+        return self.is_live
+
+    @property
+    def connected(self):
+        return self.serial.connected if self.is_live else True
+
+    @property
+    def error(self):
+        return self.serial.error if self.is_live else None
+
+    @property
+    def detail(self):
+        return self.serial.detail if self.is_live else "simulator · waiting for ESP32 on USB"
+
+    async def run(self, emit):
+        sim_task = asyncio.create_task(self.simsrc.run(emit)) if self.simsrc else None
+
+        async def serial_emit(line):
+            if not self.is_live:
+                self.is_live = True
+                sim_task.cancel()
+                await self.on_live(self.serial)
+            await emit(line)
+
+        try:
+            await self.serial.run(serial_emit)
+        finally:
+            if sim_task:
+                sim_task.cancel()
 
 
 class MqttSource:

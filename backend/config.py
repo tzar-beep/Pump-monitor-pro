@@ -15,13 +15,23 @@ CONFIG = {
     "server": {"host": "0.0.0.0", "port": 8000},
 
     # ------------------------------------------------------------------ source
-    # One of: "sim" | "serial" | "mqtt" | "replay". Switchable from the UI too.
-    "source": "sim",
+    # One of: "auto" | "sim" | "serial" | "mqtt" | "replay". Switchable from the UI too.
+    # "auto" = plug and play: simulator until an ESP32 is found on USB, then LIVE.
+    "source": "auto",
+
+    "auto": {
+        # Show simulated data (clearly badged) until the first ESP32 is found. Once a real
+        # device has been seen, losing it shows DISCONNECTED - never a silent fallback.
+        "fallback_sim": True,
+    },
 
     "serial": {
-        # Linux/Pi: /dev/ttyUSB0 or /dev/ttyACM0. Windows: COM5.
+        # "auto" = scan USB serial ports and lock onto the one sending valid pump JSON.
+        # Or a fixed port - Linux/Pi: /dev/ttyUSB0 or /dev/ttyACM0. Windows: COM5.
         # Any pyserial URL works too, e.g. "socket://127.0.0.1:7777" (used by tools/test_e2e.py).
-        "port": "/dev/ttyUSB0",
+        "port": "auto",
+        "probe_timeout_s": 4.0,       # per port: ESP32 reboots on open, then sends within ~2 s
+        "extra_candidates": [],       # extra ports/URLs the auto-scan also probes (tests, odd adapters)
         "baud": 115200,
         "read_timeout_s": 1.0,
         "reconnect_delay_s": 2.0,

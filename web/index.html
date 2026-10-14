@@ -287,6 +287,28 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .path { font-size: 11px; color: var(--ink-2); overflow-wrap: anywhere; }
 
 /* ----------------------------------------------------------------- responsive */
+/* ----------------------------------------------------------------- toast + scan list */
+.toast {
+  position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 50; max-width: calc(100vw - 32px);
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 4px; border: 1px solid var(--line-2);
+  background: var(--panel-2); box-shadow: 0 8px 28px rgba(0,0,0,.45); font-weight: 600; font-size: 13px;
+  transition: opacity .25s ease, transform .25s ease;
+}
+.toast[hidden] { display: none; }
+.toast.good { border-color: var(--good); } .toast.crit { border-color: var(--crit); }
+.toast .g { font-size: 14px; } .toast.good .g { color: var(--good); } .toast.crit .g { color: var(--crit); }
+.toast .msg { overflow-wrap: anywhere; }
+.scan { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; }
+.scan li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; padding: 3px 0; border-top: 1px dashed var(--line); }
+.scan li b { font-weight: 500; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+.scan li span { color: var(--ink-3); overflow-wrap: anywhere; }
+.scan li.ok span { color: var(--good); }
+.searching::after { content: "…"; }
+#tbDevice { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+/* Last-known values while the stream is stale/disconnected: dimmed so they never read as live. */
+body.is-stale .tile .v, body.is-stale .tile .spark, body.is-stale .gauge,
+body.is-stale #sensorBody .v, body.is-stale #featBody .v, body.is-stale #chart .series { opacity: .4; }
+
 @media (max-width: 1400px) {
   .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
@@ -331,6 +353,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   <div class="tb-group">
     <span id="statusPill" class="pill idle" role="status" aria-live="polite"><span class="g">○</span><span class="t">CONNECTING</span></span>
     <div class="kv"><small>Pump</small><span id="tbPump" class="num">—</span></div>
+    <div class="kv"><small>Device</small><span id="tbDevice" class="num">—</span></div>
     <div class="kv"><small>Stream</small><span id="tbStream" class="num">—</span></div>
     <div class="kv"><small>Last msg</small><span id="tbAge" class="num">—</span></div>
     <span id="sourcePill" class="pill crit" title="Data source"><span class="g">■</span><span class="t">DISCONNECTED</span></span>
@@ -338,6 +361,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     <button id="themeBtn" class="icon-btn" type="button" aria-label="Toggle light/dark theme">◐</button>
   </div>
 </header>
+
+<div class="toast" id="toast" role="alert" hidden><span class="g"></span><span class="msg"></span></div>
 
 <main>
   <!-- 1. KPI row ---------------------------------------------------------->
@@ -369,6 +394,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     <div class="ctl">
       <label for="srcSel">Data source <span id="srcConn" class="muted"></span></label>
       <select id="srcSel">
+        <option value="auto">Auto · ESP32 on USB when plugged in</option>
         <option value="sim">Simulator (no hardware)</option>
         <option value="serial">ESP32 · USB serial</option>
         <option value="mqtt">ESP32 · MQTT (Wi-Fi)</option>
@@ -376,6 +402,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
       </select>
       <div class="note mono" id="srcDetail"></div>
       <div class="note err" id="srcErr" hidden></div>
+      <div id="scanBox" hidden><div class="note" id="scanHead"></div><ul class="scan" id="scanList"></ul></div>
       <div id="replayBox" hidden style="margin-top:8px">
         <select id="replaySel" aria-label="Replay file"></select>
         <div class="note" id="replayPos"></div>
@@ -545,12 +572,33 @@ const handlers = {
   },
   state(s) { store.state = s; render.state(); },
   alert(m) {
+    if (m.alert.toast) showToast(m.alert.toast, m.alert.msg);
     store.alerts.unshift(m.alert);
     if (store.alerts.length > UI.maxAlertsShown) store.alerts.pop();
     render.alerts();
   },
   ack(m) { if (!m.ok) flashError(m.error); },
 };
+
+function showToast(cls, msg) {
+  const t = $("toast");
+  t.className = `toast ${cls}`;
+  t.querySelector(".g").textContent = cls === "good" ? "●" : "✕";
+  t.querySelector(".msg").textContent = msg;
+  t.hidden = false;
+  clearTimeout(showToast.t);
+  showToast.t = setTimeout(() => { t.hidden = true; }, cls === "crit" ? 10000 : 6000);
+}
+
+/** Device line for the top bar and pipeline: where the ESP32 is, or what the scan is doing. */
+function deviceText() {
+  const s = store.state, ser = s?.serial;
+  if (!s) return "—";
+  if (!ser) return s.source === "mqtt" ? "MQTT (Wi-Fi)" : s.source === "replay" ? "CSV replay" : "simulator";
+  if (ser.connected && ser.port) return `${ser.port}${ser.device ? " · " + ser.device : ""}`;
+  if (s.mode === "auto" && s.source === "sim") return "searching USB";
+  return ser.port ? `${ser.port} unplugged · rescanning` : "searching USB";
+}
 
 function flashError(msg) {
   const el = $("srcErr");
@@ -711,6 +759,7 @@ const render = {
     pill.querySelector(".g").textContent = GLYPH[cls];
     pill.querySelector(".t").textContent = label + (link.bad && f ? " (stale)" : "");
     pill.title = link.bad ? "Last known status — data stream is not fresh" : "Overall system status";
+    document.body.classList.toggle("is-stale", link.bad && !!f);
 
     // Source badge (always visible): SIMULATED DATA / LIVE DATA / REPLAY DATA / STALE / DISCONNECTED
     const sp = $("sourcePill");
@@ -726,6 +775,9 @@ const render = {
       else pump = f.running ? `RUNNING ${fmt(f.reading.rpm, 0, 4)} rpm` : "STOPPED";
     }
     $("tbPump").textContent = pump;
+    const dev = deviceText();
+    $("tbDevice").textContent = dev;
+    $("tbDevice").classList.toggle("searching", /searching|rescanning/.test(dev));
     $("tbStream").textContent = !store.wsOpen ? "OFFLINE" : s?.paused ? "PAUSED" : `RUNNING ${fmt(s?.msg_rate_hz ?? 0, 2)} Hz`;
     $("tbAge").textContent = link.age === null ? "—" : `${fmt(link.age, link.age < 100 ? 1 : 0, 5)} s ago`;
   },
@@ -833,7 +885,7 @@ const render = {
     // ESP32 / transport
     dot("esp32", link.cls, fresh && f);
     dl("esp32", [
-      ["link", s ? (s.source === "sim" ? "simulated" : s.source === "replay" ? "replay" : s.source) : "—"],
+      ["link", s ? (s.mode === "auto" && s.source === "sim" ? "sim · scanning USB" : s.source === "sim" ? "simulated" : s.source === "replay" ? "replay" : deviceText()) : "—"],
       ["rate", s ? `${fmt(s.msg_rate_hz, 2)} Hz` : "—"],
       ["seq", f?.reading.seq ?? f?.reading.ts ?? "—"],
     ]);
@@ -869,8 +921,18 @@ const render = {
     const s = store.state;
     if (!s || !store.cfg) return;
     const isSim = s.source === "sim";
-    $("srcSel").value = s.source;
-    $("srcConn").textContent = s.source_connected ? "connected" : "not connected";
+    $("srcSel").value = s.mode;
+    const ser = s.serial, scanBox = $("scanBox");
+    scanBox.hidden = !ser || (ser.connected && s.source !== "sim");
+    if (ser) {
+      $("scanHead").textContent = ser.auto
+        ? (s.source === "sim" ? "Simulator running until an ESP32 is plugged in. Scanning USB every 2 s:" : "Device lost. Rescanning USB every 2 s:")
+        : `Waiting for ${ser.port}…`;
+      $("scanList").innerHTML = (ser.scan || []).map((r) =>
+        `<li class="${r.result.includes("✓") ? "ok" : ""}"><b>${esc(r.port)}</b><span>${esc(r.desc)} — ${esc(r.result)}</span></li>`).join("")
+        || (ser.auto ? `<li><b>—</b><span>no USB serial ports found yet</span></li>` : "");
+    }
+    $("srcConn").textContent = s.mode === "auto" && s.source === "sim" ? "waiting for ESP32" : s.source_connected ? "connected" : "not connected";
     $("srcDetail").textContent = s.source_detail;
     const err = $("srcErr");
     err.hidden = !s.source_error; err.textContent = s.source_error || "";

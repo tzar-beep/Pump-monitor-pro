@@ -15,25 +15,63 @@ The browser only reads the WebSocket. It never talks to serial, MQTT or the
 simulator, so it cannot tell a simulated stream from a real one, apart from the
 source badge that tells the operator.
 
-## Quick start
+## Quick start: plug and play
+
+**Raspberry Pi (one-time setup, then it's automatic):**
+
+```bash
+git clone https://github.com/tzar-beep/Pump-monitor-pro.git && cd Pump-monitor-pro
+./deploy/install_pi.sh --kiosk      # omit --kiosk if the Pi has no screen
+```
+
+This installs everything, gives your user serial-port access, and registers a systemd
+service that starts the backend on every boot. With `--kiosk`, it also opens the dashboard
+full-screen when the Pi logs in. After that, **plug the ESP32 into any USB port. That's it.**
+
+**Windows:** double-click **`start.bat`**. The first run sets up Python packages, then the
+dashboard opens in your browser.
+
+**Manually, on any OS:**
 
 ```bash
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt      # Windows: .venv\Scripts\pip ...
-.venv/bin/python -m backend                    # simulator, http://localhost:8000
+.venv/bin/python -m backend                    # http://localhost:8000
 ```
 
-Open **http://localhost:8000** (or `http://<pi-ip>:8000` from another machine on the LAN).
-To switch the data source, use the **Data source** dropdown, or start the backend with a flag:
+### What happens when you plug in (default `auto` source)
+
+1. **Nothing plugged in.** The dashboard runs the simulator, with the amber
+   **SIMULATED DATA** badge and *Device: searching USB…*. Every 2 s the backend lists the USB
+   serial ports (CP210x, CH340, FTDI, ESP32 native USB, and so on). Bluetooth and legacy COM
+   ports are skipped.
+2. **ESP32 plugged in.** Each port is opened and read for up to 4 s, which allows for the ESP32
+   rebooting when the port opens. The first port that sends a message passing full validation
+   is locked in. The simulator stops, the history is cleared, a green banner says
+   *ESP32 detected on COM5 (CP210x) — LIVE data*, and the badge turns to green **LIVE DATA**.
+   This usually takes 2–5 s.
+3. **Unplugged.** A red banner and the **DISCONNECTED** badge appear, and the last values are
+   dimmed. The app **never falls back to simulated data** once a real device has been seen,
+   because that would hide a real fault.
+4. **Plugged back in.** The app reconnects on its own, even if the OS gave the board a new port name.
+
+If a port is found but rejected, the **Controls → Data source** panel lists every port it
+probed and why, for example *silent: no data (firmware flashed?)*,
+*port busy: close Arduino Serial Monitor*, or *permission denied: add your user to dialout*.
+
+### Other modes
+
+To change mode, use the **Data source** dropdown, or start the backend with a flag:
 
 | Mode | Command |
 |---|---|
-| Simulator (default) | `python -m backend --source sim` |
-| ESP32 over USB serial | `python -m backend --source serial --serial-port /dev/ttyUSB0 --baud 115200` |
+| Auto (default) | `python -m backend`. Add `--no-sim-fallback` to show nothing until hardware is found. |
+| Simulator only | `python -m backend --source sim` |
+| ESP32 on a fixed port | `python -m backend --source serial --serial-port /dev/ttyUSB0` (`--source serial` alone auto-detects, without the simulator) |
 | ESP32 over MQTT | `PUMP_MQTT_PASSWORD=… python -m backend --source mqtt --mqtt-host 192.168.1.10 --mqtt-topic pumprig/esp32/telemetry` |
 | Replay a recorded CSV | `python -m backend --source replay --replay-file data/sample_session.csv --replay-speed 4` |
 | Use a trained model | add `--model models/iforest.json` |
-| Log to CSV from start-up | add `--log` (it can also be switched on from the UI) |
+| Log to CSV from start-up | add `--log` (it can also be switched on from the UI). Live data goes to its own file. |
 
 Every tunable constant is in [`backend/config.py`](backend/config.py) (`CONFIG`): baselines,
 feature scales, thresholds, window size, ranges, serial/MQTT settings and simulator physics.
@@ -179,6 +217,7 @@ without blocking, and prints one line per second. Pins:
 | Test | Command | What it checks |
 |---|---|---|
 | Scenario logic (headless) | `python -m tools.scenario_check -v` | Drives every scenario, the valve at 20/40/70 %, stop/start and dry run through the real `Processor`, and asserts the final status of each step plus the alerts |
+| Plug-and-play, any OS | `python tools/test_autodetect.py` | Starts in auto mode with nothing attached, then plugs in a fake ESP32, unplugs it and plugs it back in. Asserts: simulator while waiting, scan reasons listed, automatic switch to LIVE (about 2 s), DISCONNECTED on unplug with no fallback to simulated data, banners, and automatic reconnect |
 | Live path, any OS | `python tools/test_e2e.py` | Fake ESP32 on TCP → pyserial `socket://` URL → the real `SerialSource` → WebSocket client. Injects bad lines, sequence gaps and a 9 s stall, and asserts rejection counts, LIVE → STALE → reconnect → LIVE, the CSV log, and replay of that log |
 | Live path over a real pty (Pi/Linux) | `sudo apt install socat && ./tools/test_live_path.sh` | `socat` creates a virtual serial pair. `fake_esp32.py` writes to `/tmp/ttyESP32` and the backend reads `/tmp/ttyPI`, as it would read `/dev/ttyUSB0`. Extra flags pass through, e.g. `--scenario imbalance --stall-after 30` |
 | Offline replay of logged data | `python tools/replay_eval.py data/sample_session.csv [--model models/iforest.json]` | Recomputes every window with the chosen scorer and prints the status mix, agreement with the logged status, and alerts |
@@ -209,13 +248,16 @@ COM pair, install com0com and run `fake_esp32.py --port COM6` with `--serial-por
 8. **Float switch**: closed = water present (reads LOW with `INPUT_PULLUP` and is reported as `float:1`).
    Invert in firmware if your switch is normally open the other way. The real interlock should cut
    pump power in hardware, through a relay or contactor wired to the float. The Pi only displays it.
-9. **Standby detection**: RPM < 200 means the pump is not running. The Pi has no pump-command input on a live source.
-10. **Outlet restriction signature**: the brief specifies Current ↑. On a radial-flow centrifugal pump,
+9. **Auto-detect**: any USB serial port is probed at 115200 baud. The board is accepted only if a
+   line passes full validation, so other USB serial devices are opened briefly but never used.
+   If you have other USB-serial gear on the Pi that must not be opened, set a fixed `serial.port`.
+10. **Standby detection**: RPM < 200 means the pump is not running. The Pi has no pump-command input on a live source.
+11. **Outlet restriction signature**: the brief specifies Current ↑. On a radial-flow centrifugal pump,
     throttling the discharge usually **reduces** shaft power and current. The simulator follows the brief
     (`valve.cur_k`, `blockage.current_add`). Flip the sign if the rig shows the opposite.
-11. **Thresholds**: stale after 3 s without a valid message, the serial port is reopened after 6 s of silence,
+12. **Thresholds**: stale after 3 s without a valid message, the serial port is reopened after 6 s of silence,
     startup inhibit is 8 s, debounce 2 samples, deadband 0.08.
-12. **Isolation Forest calibration**: `CRIT_FACTOR = 1.8` in `train_iforest.py` was chosen on simulated
+13. **Isolation Forest calibration**: `CRIT_FACTOR = 1.8` in `train_iforest.py` was chosen on simulated
     faults. Re-check it with `replay_eval.py` once real fault runs have been logged.
 
 ## Layout
@@ -223,11 +265,13 @@ COM pair, install com0com and run `fake_esp32.py --port COM6` with `--serial-por
 ```
 backend/   config.py (all constants) · schema.py (validation) · simulator.py · features.py
            scorer.py (demo + Isolation Forest, load_scorer hook) · processor.py (window/score/status/alerts)
-           sources.py (sim / serial / mqtt / replay) · csvlog.py · server.py (FastAPI + WebSocket) · __main__.py
+           sources.py (auto / sim / serial / mqtt / replay) · csvlog.py · server.py (FastAPI + WebSocket) · __main__.py
 web/       index.html: the HMI. Plain HTML/CSS/JS, no build step, hand-drawn SVG charts
 firmware/  esp32_pump_node/esp32_pump_node.ino
-tools/     scenario_check.py · test_e2e.py · test_live_path.sh · fake_esp32.py
+tools/     scenario_check.py · test_autodetect.py · test_e2e.py · test_live_path.sh · fake_esp32.py
            replay_eval.py · train_iforest.py · make_sample_csv.py
+deploy/    install_pi.sh (Pi setup + boot service + kiosk) · pump-console.service · kiosk.sh
+start.bat  Windows one-click launcher
 data/      sample_session.csv  (simulated session for replay/training demos)
 models/    iforest.json        (demo model trained on simulated data)
 logs/      CSV session logs (git-ignored)
