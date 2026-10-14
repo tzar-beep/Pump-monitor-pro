@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pump Health Console</title>
+<meta name="description" content="Edge-AI predictive maintenance HMI for a centrifugal pump test rig">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   Tokens. Accent = data lines only. good/warn/crit = status only.
+   ===================================================================== */
+:root, :root[data-theme="dark"] {
+  --bg: #0c0e0f;
+  --panel: #141719;
+  --panel-2: #1a1e21;
+  --line: #262c30;
+  --line-2: #343c41;
+  --ink: #e9edef;
+  --ink-2: #b3bcc1;
+  --ink-3: #7c878d;
+  --accent: #3987e5;
+  --accent-soft: rgba(57,135,229,.16);
+  --good: #0ca30c;
+  --warn: #fab219;
+  --crit: #e04848;
+  --idle: #5b656b;
+  --good-bg: rgba(12,163,12,.14);
+  --warn-bg: rgba(250,178,25,.14);
+  --crit-bg: rgba(224,72,72,.16);
+  --grid: #20262a;
+  --shadow: none;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #eef0ee;
+  --panel: #fcfcfb;
+  --panel-2: #f4f5f3;
+  --line: #dcdfdc;
+  --line-2: #c5cac6;
+  --ink: #0b0b0b;
+  --ink-2: #3f4446;
+  --ink-3: #686e70;
+  --accent: #2a78d6;
+  --accent-soft: rgba(42,120,214,.12);
+  --good: #0a8f0a;
+  --warn: #c98a00;
+  --crit: #d03b3b;
+  --idle: #9aa1a4;
+  --good-bg: rgba(12,163,12,.12);
+  --warn-bg: rgba(250,178,25,.18);
+  --crit-bg: rgba(208,59,59,.12);
+  --grid: #e7e9e6;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px/1.4 "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+.num, .mono {
+  font-family: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+button, select, input { font: inherit; color: inherit; }
+h2 {
+  margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2);
+}
+.muted { color: var(--ink-3); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ----------------------------------------------------------------- top bar */
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
+.brand b { font-size: 15px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+.brand span { color: var(--ink-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.kv { display: flex; flex-direction: column; line-height: 1.15; }
+.kv small { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.kv span { font-size: 12px; white-space: nowrap; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px;
+  border: 1px solid var(--line-2); border-radius: 3px; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; white-space: nowrap; background: var(--panel-2);
+}
+.pill .g { font-size: 10px; }
+.pill.good { border-color: var(--good); background: var(--good-bg); }
+.pill.warn { border-color: var(--warn); background: var(--warn-bg); }
+.pill.crit { border-color: var(--crit); background: var(--crit-bg); }
+.pill.good .g { color: var(--good); } .pill.warn .g { color: var(--warn); } .pill.crit .g { color: var(--crit); }
+.pill.idle .g { color: var(--idle); }
+.pill.stale { opacity: .55; background-image: repeating-linear-gradient(135deg, transparent 0 5px, var(--line) 5px 6px); }
+#statusPill { height: 28px; font-size: 12px; min-width: 132px; justify-content: center; }
+.icon-btn {
+  height: 26px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 3px; background: transparent; cursor: pointer; color: var(--ink-2);
+}
+.icon-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+
+/* ----------------------------------------------------------------- layout */
+main {
+  display: grid; gap: 10px; padding: 10px 16px 24px;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  grid-template-areas:
+    "kpi kpi"
+    "pipe pipe"
+    "trend ctrl"
+    "sensors ctrl"
+    "features alerts";
+  max-width: 1680px; margin: 0 auto;
+}
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; min-width: 0; }
+.panel > header {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 9px 12px; border-bottom: 1px solid var(--line);
+}
+.panel > header .spacer { margin-left: auto; }
+.panel .body { padding: 10px 12px; }
+#kpis { grid-area: kpi; }
+#pipeline { grid-area: pipe; }
+#trend { grid-area: trend; }
+#controls { grid-area: ctrl; align-self: start; }
+#sensors { grid-area: sensors; }
+#features { grid-area: features; }
+#alerts { grid-area: alerts; display: flex; flex-direction: column; }
+
+/* ----------------------------------------------------------------- KPI tiles */
+.kpis { display: grid; gap: 10px; grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.tile {
+  position: relative; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--idle);
+  border-radius: 4px; padding: 8px 10px 6px; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+}
+.tile.good { border-left-color: var(--good); }
+.tile.warn { border-left-color: var(--warn); background: linear-gradient(var(--warn-bg), transparent 70%), var(--panel); }
+.tile.crit { border-left-color: var(--crit); background: linear-gradient(var(--crit-bg), transparent 70%), var(--panel); }
+.tile .t-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.tile .t-label { font-size: 11px; color: var(--ink-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .t-state { font-size: 10px; letter-spacing: .06em; color: var(--ink-3); white-space: nowrap; }
+.tile .t-state .g { margin-right: 3px; }
+.tile.good .t-state .g { color: var(--good); } .tile.warn .t-state .g { color: var(--warn); } .tile.crit .t-state .g { color: var(--crit); }
+.tile .t-val { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.tile .t-val .v { font-size: 24px; font-weight: 500; letter-spacing: -.01em; line-height: 1.1; }
+.tile .t-val .u { font-size: 11px; color: var(--ink-3); }
+.tile .t-sub { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spark { display: block; width: 100%; height: 26px; margin-top: 2px; }
+.spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.spark .base { stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 2 3; }
+.tile.gauge-tile { align-items: stretch; }
+.gauge { display: block; width: 100%; max-width: 150px; height: auto; margin: -2px auto -6px; }
+.gauge .track { stroke: var(--line-2); }
+.gauge .arc { transition: stroke-dashoffset .4s ease; }
+.gauge text { fill: var(--ink); }
+
+/* ----------------------------------------------------------------- pipeline */
+.pipe { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 22px; padding: 12px; }
+.node {
+  position: relative; border: 1px solid var(--line-2); border-radius: 4px; padding: 8px 10px; background: var(--panel-2); min-width: 0;
+}
+.node + .node::before {
+  content: ""; position: absolute; left: -22px; top: 50%; width: 22px; height: 1px; background: var(--line-2);
+}
+.node + .node::after {
+  content: ""; position: absolute; left: -7px; top: calc(50% - 4px); border: 4px solid transparent; border-left: 6px solid var(--ink-3);
+}
+.node.flow + .node::before { background: var(--accent); }
+.node .n-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; }
+.node .n-hw { font-size: 10.5px; color: var(--ink-3); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px 8px; font-size: 11px; }
+.node dt { color: var(--ink-3); }
+.node dd { margin: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); flex: none; display: inline-block; }
+.dot.good { background: var(--good); } .dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); }
+.dot.pulse { box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ----------------------------------------------------------------- trend */
+.seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line-2); border-radius: 3px; overflow: hidden; }
+.seg button { border: 0; border-right: 1px solid var(--line-2); background: transparent; padding: 3px 9px; cursor: pointer; color: var(--ink-2); font-size: 12px; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+.chart-wrap { position: relative; padding: 8px 6px 4px 0; }
+#chart { display: block; width: 100%; height: 280px; }
+#chart .grid line { stroke: var(--grid); }
+#chart .axis text { fill: var(--ink-3); font-size: 10.5px; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+#chart .axis-title { fill: var(--ink-3); font-size: 10.5px; }
+#chart .series { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+#chart .area { fill: var(--accent-soft); stroke: none; }
+#chart .end { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+#chart .end-label { fill: var(--ink); font-size: 11px; font-weight: 600; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+#chart .th-warn { stroke: var(--warn); stroke-dasharray: 5 4; }
+#chart .th-crit { stroke: var(--crit); stroke-dasharray: 5 4; }
+#chart .th-label { font-size: 10px; fill: var(--ink-2); font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+#chart .base { stroke: var(--ink-3); stroke-dasharray: 2 4; }
+#chart .cross { stroke: var(--ink-3); }
+#chart .hover-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+#chart .empty { fill: var(--ink-3); font-size: 12px; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 3px;
+  padding: 5px 8px; font-size: 11px; white-space: nowrap; display: none; z-index: 2; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+}
+.tip b { font-weight: 600; }
+.trend-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 12px 10px; font-size: 11px; color: var(--ink-3); }
+.trend-meta .num { color: var(--ink-2); }
+
+/* ----------------------------------------------------------------- tables */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); background: var(--panel); }
+tbody tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; }
+td .sub { display: block; font-size: 10.5px; color: var(--ink-3); }
+.chip { display: inline-block; padding: 0 5px; margin: 1px 2px 1px 0; border: 1px solid var(--line-2); border-radius: 2px; font-size: 10.5px; color: var(--ink-2); white-space: nowrap; }
+.chip.none { border-style: dashed; color: var(--ink-3); }
+.st { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; color: var(--ink-2); }
+.zbar { position: relative; width: 84px; height: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 2px; }
+.zbar::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--ink-3); }
+.zbar i { position: absolute; top: 1px; bottom: 1px; background: var(--ink-3); border-radius: 1px; }
+.zbar i.warn { background: var(--warn); } .zbar i.crit { background: var(--crit); }
+details.info { border-top: 1px solid var(--line); padding: 8px 12px; font-size: 12px; color: var(--ink-2); }
+details.info summary { cursor: pointer; color: var(--ink-2); font-weight: 500; }
+details.info code, .formula { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-size: 11.5px; }
+.formula { display: block; margin: 6px 0; padding: 6px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; white-space: pre-wrap; color: var(--ink); }
+.tag { display: inline-block; padding: 1px 6px; border: 1px dashed var(--line-2); border-radius: 2px; font-size: 10.5px; color: var(--ink-2); }
+
+/* ----------------------------------------------------------------- alerts */
+#alertList { list-style: none; margin: 0; padding: 0; overflow-y: auto; max-height: 420px; flex: 1; }
+#alertList li {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; align-items: baseline;
+  padding: 6px 12px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; font-size: 12px;
+}
+#alertList li.crit { border-left-color: var(--crit); background: linear-gradient(90deg, var(--crit-bg), transparent 60%); }
+#alertList li.warn { border-left-color: var(--warn); background: linear-gradient(90deg, var(--warn-bg), transparent 60%); }
+#alertList li.info { border-left-color: var(--line-2); }
+#alertList .sev { font-size: 10px; font-weight: 600; letter-spacing: .06em; width: 44px; }
+#alertList li.crit .sev { color: var(--crit); } #alertList li.warn .sev { color: var(--warn); } #alertList li.info .sev { color: var(--ink-3); }
+#alertList .time { color: var(--ink-3); font-size: 11px; }
+#alertList .msg { overflow-wrap: anywhere; }
+#alertList .empty { display: block; color: var(--ink-3); border: 0; }
+
+/* ----------------------------------------------------------------- controls */
+.ctl { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.ctl:last-child { border-bottom: 0; }
+.ctl > label, .ctl > .lbl { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+.ctl select { width: 100%; height: 30px; padding: 0 8px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 3px; }
+.ctl .note { margin-top: 5px; font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+.ctl .note.err { color: var(--crit); }
+.scen { display: grid; gap: 4px; }
+.scen label {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; align-items: start; padding: 6px 8px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 3px; background: var(--panel-2);
+}
+.scen label:hover { border-color: var(--line-2); }
+.scen input { margin: 2px 0 0; accent-color: var(--accent); }
+.scen label:has(input:checked) { border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+.scen b { font-weight: 500; font-size: 12.5px; }
+.scen small { grid-column: 2; font-size: 11px; color: var(--ink-3); }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+fieldset:disabled { opacity: .45; }
+fieldset:disabled label { cursor: not-allowed; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.range-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-3); }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn {
+  height: 32px; border: 1px solid var(--line-2); border-radius: 3px; background: var(--panel-2); cursor: pointer; font-weight: 600; font-size: 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn:hover:not(:disabled) { border-color: var(--ink-3); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.on { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; }
+.switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+.counters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; text-align: center; }
+.counters div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; padding: 4px 2px; }
+.counters small { display: block; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.counters .num { font-size: 13px; }
+.counters .bad .num { color: var(--crit); }
+.path { font-size: 11px; color: var(--ink-2); overflow-wrap: anywhere; }
+
+/* ----------------------------------------------------------------- responsive */
+@media (max-width: 1400px) {
+  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .pipe { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .node:nth-child(4)::before, .node:nth-child(4)::after { display: none; }
+}
+@media (max-width: 980px) {
+  main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "kpi" "trend" "ctrl" "pipe" "sensors" "features" "alerts";
+  }
+  .topbar { position: static; }
+}
+@media (max-width: 640px) {
+  main { padding: 8px 16px 20px; gap: 8px; }
+  .topbar { padding: 8px 16px; }
+  .brand span { display: none; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile .t-val .v { font-size: 20px; }
+  .pipe { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .node + .node::before { left: 50%; top: -14px; width: 1px; height: 14px; }
+  .node + .node::after { left: calc(50% - 4px); top: -7px; border: 4px solid transparent; border-top: 6px solid var(--ink-3); }
+  .node:nth-child(4)::before, .node:nth-child(4)::after { display: block; }
+  #chart { height: 220px; }
+  .hide-sm { display: none; }
+  th, td { padding: 6px 7px; }
+  .counters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .zbar { width: 54px; }
+  #sensors th, #sensors td { padding: 6px 5px; }
+  #sensors .chip { white-space: normal; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar" role="banner">
+  <div class="brand"><b>Pump Health Console</b><span>Centrifugal pump test rig · edge AI on Raspberry Pi 5</span></div>
+  <div class="tb-group">
+    <span id="statusPill" class="pill idle" role="status" aria-live="polite"><span class="g">○</span><span class="t">CONNECTING</span></span>
+    <div class="kv"><small>Pump</small><span id="tbPump" class="num">—</span></div>
+    <div class="kv"><small>Stream</small><span id="tbStream" class="num">—</span></div>
+    <div class="kv"><small>Last msg</small><span id="tbAge" class="num">—</span></div>
+    <span id="sourcePill" class="pill crit" title="Data source"><span class="g">■</span><span class="t">DISCONNECTED</span></span>
+    <div class="kv"><small id="tbDate">—</small><span id="tbClock" class="num">--:--:--</span></div>
+    <button id="themeBtn" class="icon-btn" type="button" aria-label="Toggle light/dark theme">◐</button>
+  </div>
+</header>
+
+<main>
+  <!-- 1. KPI row ---------------------------------------------------------->
+  <section id="kpis" class="kpis" aria-label="Key indicators"></section>
+
+  <!-- 5. Pipeline ---------------------------------------------------------->
+  <section id="pipeline" class="panel" aria-label="Data pipeline">
+    <header><h2>Data pipeline</h2><span class="muted" id="pipeNote">Sensors → ESP32 → Pi 5 → model → HMI</span></header>
+    <div class="pipe" id="pipe"></div>
+  </section>
+
+  <!-- 3. Trend ------------------------------------------------------------->
+  <section id="trend" class="panel" aria-label="Trend">
+    <header>
+      <h2>Trend</h2>
+      <span class="muted" id="trendTitle"></span>
+      <div class="seg spacer" id="metricSeg" role="group" aria-label="Trend metric"></div>
+    </header>
+    <div class="chart-wrap" id="chartWrap">
+      <svg id="chart" role="img" aria-label="Trend chart"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="trend-meta" id="trendMeta"></div>
+  </section>
+
+  <!-- 8. Controls ---------------------------------------------------------->
+  <section id="controls" class="panel" aria-label="Controls">
+    <header><h2>Controls</h2></header>
+    <div class="ctl">
+      <label for="srcSel">Data source <span id="srcConn" class="muted"></span></label>
+      <select id="srcSel">
+        <option value="sim">Simulator (no hardware)</option>
+        <option value="serial">ESP32 · USB serial</option>
+        <option value="mqtt">ESP32 · MQTT (Wi-Fi)</option>
+        <option value="replay">Replay recorded CSV</option>
+      </select>
+      <div class="note mono" id="srcDetail"></div>
+      <div class="note err" id="srcErr" hidden></div>
+      <div id="replayBox" hidden style="margin-top:8px">
+        <select id="replaySel" aria-label="Replay file"></select>
+        <div class="note" id="replayPos"></div>
+      </div>
+    </div>
+    <div class="ctl">
+      <div class="lbl"><span>Scenario</span><span id="scenNote" class="muted" style="text-transform:none;letter-spacing:0;font-weight:400"></span></div>
+      <fieldset id="scenSet"><legend class="sr">Simulator scenario</legend><div class="scen" id="scenList"></div></fieldset>
+    </div>
+    <div class="ctl">
+      <label for="valve">Discharge valve <span class="num" id="valveVal" style="color:var(--ink)">0 % closed</span></label>
+      <fieldset id="valveSet"><input id="valve" type="range" min="0" max="100" step="1" value="0" aria-describedby="valveHelp">
+      <div class="range-scale num"><span>0 open</span><span>50</span><span>100 shut</span></div></fieldset>
+      <div class="note" id="valveHelp">Adds outlet restriction on top of any scenario.</div>
+    </div>
+    <div class="ctl">
+      <div class="btn-row">
+        <button class="btn" id="pumpBtn" type="button">■ Stop pump</button>
+        <button class="btn" id="pauseBtn" type="button">❚❚ Pause stream</button>
+      </div>
+      <div class="note" id="pumpNote"></div>
+    </div>
+    <div class="ctl">
+      <div class="lbl"><span>CSV logging on Pi</span><span id="logRows" class="num muted" style="letter-spacing:0"></span></div>
+      <label class="switch"><input type="checkbox" id="logChk"><span>Log every valid message</span></label>
+      <div class="path mono" id="logPath"></div>
+    </div>
+    <div class="ctl">
+      <div class="lbl"><span>Message counters</span><button class="icon-btn" id="resetCnt" type="button" style="height:20px;font-size:10px">reset</button></div>
+      <div class="counters" id="counters"></div>
+      <div class="note mono" id="lastInvalid"></div>
+    </div>
+  </section>
+
+  <!-- 4. Sensors ----------------------------------------------------------->
+  <section id="sensors" class="panel" aria-label="Sensors">
+    <header><h2>Sensors</h2><span class="muted">ESP32 acquisition · raw per-sample values</span></header>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Sensor</th><th class="hide-sm">Channel</th><th class="r">Reading</th><th>Unit</th><th class="r hide-sm">Valid range</th><th>Status</th><th>ML features</th></tr></thead>
+        <tbody id="sensorBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 6. Feature vector ---------------------------------------------------->
+  <section id="features" class="panel" aria-label="Feature vector">
+    <header><h2>Feature vector</h2><span class="muted" id="featNote"></span><span class="tag spacer" id="scorerTag">scorer</span></header>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Feature</th><th class="r">Value</th><th class="r">Baseline</th><th class="r hide-sm">Scale σ</th><th class="r">z</th><th>Deviation</th></tr></thead>
+        <tbody id="featBody"></tbody>
+      </table>
+    </div>
+    <details class="info" id="scoreInfo">
+      <summary>How the anomaly score is computed</summary>
+      <div id="scoreInfoBody"></div>
+    </details>
+  </section>
+
+  <!-- 7. Alerts ------------------------------------------------------------>
+  <section id="alerts" class="panel" aria-label="Alerts">
+    <header><h2>Alerts</h2><span class="muted num" id="alertCounts"></span></header>
+    <ul id="alertList" aria-live="polite"></ul>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ======================================================================
+   Pump Health Console — browser HMI.
+
+   The browser does NO acquisition and NO ML. It only consumes the Pi's
+   WebSocket stream (simulator, USB serial, MQTT and replay all look the
+   same here) and renders it:
+
+     transport (WebSocket)  ->  store  ->  renderers
+
+   Baselines, thresholds and feature definitions arrive from the Pi in the
+   "hello" message (backend/config.py is the single source of truth).
+   Frontend-only tunables live in UI below.
+   ====================================================================== */
+const UI = {
+  // ws://<page host>/ws when served by the Pi; fallback when opened as a file.
+  wsUrl: location.protocol.startsWith("http")
+    ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`
+    : "ws://localhost:8000/ws",
+  trendLen: 120,          // samples in the main trend
+  sparkLen: 60,           // samples in KPI sparklines
+  reconnectMs: [500, 1000, 2000, 4000, 5000],
+  valveSendMs: 150,       // slider throttle
+  maxAlertsShown: 200,
+};
+
+/* ----------------------------------------------------------------------
+   Formatting helpers. Numbers are padded with FIGURE SPACE (U+2007, same
+   advance as a digit in tabular fonts) so values never change width.
+   ---------------------------------------------------------------------- */
+const FS = " ";
+const fmt = (v, dp, width = 0) => {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—".padStart(width, FS);
+  return v.toFixed(dp).padStart(width, FS);
+};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const hhmmss = (t) => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+const GLYPH = { good: "●", warn: "▲", crit: "✕", idle: "○" };
+const STATUS_CLASS = {
+  "HEALTHY": "good", "WARNING": "warn", "CRITICAL": "crit",
+  "DRY-RUN PROTECTION": "crit", "STANDBY": "idle", "STARTING": "idle",
+};
+const STATE_LABEL = { good: "OK", warn: "WARN", crit: "ALARM", idle: "IDLE" };
+
+/* ======================================================================
+   STORE
+   ====================================================================== */
+const store = {
+  cfg: null, frames: [], alerts: [], state: null,
+  ws: null, wsOpen: false, lastFrameAt: 0, metric: "score",
+  get last() { return this.frames[this.frames.length - 1] || null; },
+};
+
+/* ======================================================================
+   TRANSPORT — WebSocket client with auto-reconnect
+   ====================================================================== */
+const transport = (() => {
+  let attempt = 0;
+  function connect() {
+    const ws = new WebSocket(UI.wsUrl);
+    store.ws = ws;
+    ws.onopen = () => { store.wsOpen = true; attempt = 0; };
+    ws.onclose = () => {
+      store.wsOpen = false;
+      setTimeout(connect, UI.reconnectMs[Math.min(attempt++, UI.reconnectMs.length - 1)]);
+      render.topbar();
+    };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      handlers[m.type]?.(m);
+    };
+  }
+  function send(cmd, value) {
+    if (store.ws && store.ws.readyState === 1) store.ws.send(JSON.stringify({ cmd, value }));
+  }
+  return { connect, send };
+})();
+
+const handlers = {
+  hello(m) {
+    store.cfg = m.config;
+    store.frames = m.history.slice(-UI.trendLen);
+    store.alerts = m.alerts.slice().reverse();
+    store.state = m.state;
+    store.lastFrameAt = store.frames.length ? performance.now() - (m.state.last_valid_age_s ?? 0) * 1000 : 0;
+    build.all();
+    render.all();
+  },
+  frame(f) {
+    store.frames.push(f);
+    if (store.frames.length > UI.trendLen) store.frames.shift();
+    store.lastFrameAt = performance.now();
+    render.frame();
+  },
+  state(s) { store.state = s; render.state(); },
+  alert(m) {
+    store.alerts.unshift(m.alert);
+    if (store.alerts.length > UI.maxAlertsShown) store.alerts.pop();
+    render.alerts();
+  },
+  ack(m) { if (!m.ok) flashError(m.error); },
+};
+
+function flashError(msg) {
+  const el = $("srcErr");
+  el.hidden = false; el.textContent = msg;
+  clearTimeout(flashError.t);
+  flashError.t = setTimeout(() => render.state(), 4000);
+}
+
+/* ======================================================================
+   DEFINITIONS (derived from the hello config)
+   ====================================================================== */
+const KPIS = [
+  { id: "health", label: "Health index", kind: "gauge" },
+  { id: "score", label: "Anomaly score", unit: "", dp: 2, w: 4, get: (f) => f.score },
+  { id: "rpm", label: "Speed", unit: "rpm", dp: 0, w: 4, get: (f) => f.reading.rpm, ch: "hall", base: "rpm" },
+  { id: "current", label: "Motor current", unit: "A", dp: 2, w: 5, get: (f) => f.reading.current_a, ch: "current", base: "current_a" },
+  { id: "flow", label: "Flow", unit: "L/min", dp: 1, w: 4, get: (f) => f.reading.flow_lpm, ch: "flow", base: "flow_lpm" },
+  { id: "pressure", label: "Outlet pressure", unit: "bar", dp: 2, w: 4, get: (f) => f.reading.pressure_bar, ch: "pressure", base: "pressure_bar" },
+  { id: "temp", label: "Motor temp", unit: "°C", dp: 1, w: 5, get: (f) => f.reading.temp_c, ch: "temp", base: "temp_c" },
+  { id: "vib", label: "Vibration RMS", unit: "g", dp: 3, w: 5, get: (f) => f.reading.vib_rms, ch: "vib", base: "vib_rms" },
+];
+const METRICS = {
+  current: { label: "Current", unit: "A", dp: 2, get: (f) => f.reading.current_a, base: "current_a" },
+  flow: { label: "Flow", unit: "L/min", dp: 1, get: (f) => f.reading.flow_lpm, base: "flow_lpm" },
+  pressure: { label: "Pressure", unit: "bar", dp: 2, get: (f) => f.reading.pressure_bar, base: "pressure_bar" },
+  temp: { label: "Temperature", unit: "°C", dp: 1, get: (f) => f.reading.temp_c, base: "temp_c" },
+  vib: { label: "Vibration", unit: "g", dp: 3, get: (f) => f.reading.vib_rms, base: "vib_rms" },
+  score: { label: "Anomaly score", unit: "", dp: 2, get: (f) => f.score, fixed: [0, 1], thresholds: true },
+};
+
+/* ======================================================================
+   BUILD — one-time DOM construction after hello
+   ====================================================================== */
+const build = {
+  all() { this.kpis(); this.metricSeg(); this.pipeline(); this.sensors(); this.features(); this.scenarios(); this.scoreInfo(); },
+
+  kpis() {
+    $("kpis").innerHTML = KPIS.map((k) => k.kind === "gauge" ? `
+      <div class="tile gauge-tile" id="k-health">
+        <div class="t-head"><span class="t-label">${k.label}</span><span class="t-state"><span class="g">○</span><span class="s">—</span></span></div>
+        <svg class="gauge" viewBox="0 0 120 84" aria-hidden="true">
+          <path class="track" d="${arcPath(60, 60, 46, -120, 120)}" fill="none" stroke-width="8"/>
+          <path class="arc" id="gaugeArc" d="${arcPath(60, 60, 46, -120, 120)}" fill="none" stroke-width="8" pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="100" stroke="var(--idle)"/>
+          <text x="60" y="62" text-anchor="middle" class="num" font-size="24" font-weight="500" id="gaugeVal">—</text>
+          <text x="60" y="78" text-anchor="middle" font-size="9" style="fill:var(--ink-3)">/ 100</text>
+        </svg>
+      </div>` : `
+      <div class="tile" id="k-${k.id}">
+        <div class="t-head"><span class="t-label">${k.label}</span><span class="t-state"><span class="g">○</span><span class="s">—</span></span></div>
+        <div class="t-val"><span class="v num">—</span><span class="u">${k.unit}</span></div>
+        <div class="t-sub num"></div>
+        <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><path class="base"/><path class="line"/></svg>
+      </div>`).join("");
+  },
+
+  metricSeg() {
+    const order = ["current", "flow", "pressure", "temp", "vib", "score"];
+    $("metricSeg").innerHTML = order.map((k) =>
+      `<button type="button" data-m="${k}" aria-pressed="${k === store.metric}">${METRICS[k].label}</button>`).join("");
+  },
+
+  pipeline() {
+    const nodes = [
+      ["sensors", "Sensors", "7 channels · ADXL345, DS18B20, ACS712, YF-S201, 0–5 bar, A3144, float"],
+      ["esp32", "ESP32", "acquisition · JSON lines"],
+      ["pi", "Raspberry Pi 5", "validate · window · features"],
+      ["model", "Isolation Forest", "anomaly scoring (edge)"],
+      ["health", "Health index", "(1 − score) × 100"],
+      ["hmi", "HMI / alert", "this console · CSV log"],
+    ];
+    $("pipe").innerHTML = nodes.map(([id, t, hw]) => `
+      <div class="node" id="n-${id}">
+        <div class="n-title"><span class="dot" id="nd-${id}"></span>${t}</div>
+        <div class="n-hw" title="${esc(hw)}">${hw}</div>
+        <dl id="nl-${id}"></dl>
+      </div>`).join("");
+  },
+
+  sensors() {
+    const ranges = store.cfg.ranges;
+    $("sensorBody").innerHTML = store.cfg.sensors.map((s) => {
+      const feats = s.features.length
+        ? s.features.map((k) => `<span class="chip">${esc(featLabel(k))}</span>`).join("")
+        : `<span class="chip none">none — safety interlock</span>`;
+      const r = s.id === "vib" ? `0–16/axis` : s.id === "float" ? "0 | 1" :
+        `${(ranges[s.field] || s.range)[0]}–${(ranges[s.field] || s.range)[1]}`;
+      return `<tr id="s-${s.id}">
+        <td><b style="font-weight:500">${esc(s.part)}</b><span class="sub">${esc(s.name)}</span></td>
+        <td class="hide-sm mono" style="font-size:11px;color:var(--ink-2)">${esc(s.pin)}</td>
+        <td class="r num"><span class="v">—</span><span class="sub"></span></td>
+        <td class="muted">${esc(s.unit)}</td>
+        <td class="r num hide-sm muted">${r}</td>
+        <td><span class="st"><span class="dot"></span><span class="l">—</span></span></td>
+        <td>${feats}</td></tr>`;
+    }).join("");
+  },
+
+  features() {
+    $("featBody").innerHTML = store.cfg.features.map((f) => `
+      <tr id="f-${f.key}">
+        <td>${esc(f.label)} <span class="muted" style="font-size:11px">${esc(f.unit)}</span></td>
+        <td class="r num v">—</td>
+        <td class="r num muted">${fmt(f.mean, f.dp)}</td>
+        <td class="r num muted hide-sm">±${fmt(f.scale, f.dp)}</td>
+        <td class="r num z">—</td>
+        <td><div class="zbar" aria-hidden="true"><i></i></div></td>
+      </tr>`).join("");
+    $("featNote").textContent = `window = last ${store.cfg.window} samples`;
+  },
+
+  scenarios() {
+    $("scenList").innerHTML = Object.entries(store.cfg.scenarios).map(([k, s]) => `
+      <label><input type="radio" name="scen" value="${k}"><b>${esc(s.label)}</b><small>${esc(s.signature)}</small></label>`).join("");
+  },
+
+  scoreInfo() {
+    const c = store.cfg, sc = c.scorer, st = c.status;
+    $("scoreInfoBody").innerHTML = `
+      <p style="margin:6px 0">Computed on the Raspberry Pi 5 for every sample once the ${c.window}-sample window is full.
+      The <b>demo scorer</b> stands in for Isolation Forest; it measures how far the live feature vector is from the healthy baseline,
+      in units of each feature's tolerance σ:</p>
+      <span class="formula">z_i   = (f_i − baseline_i) / σ_i
+D     = √( (1/12) · Σ clip(z_i, ±${sc.z_clip})² )
+score = 1 − exp( −(D / ${sc.d0})² )
+health = round((1 − score) × 100)</span>
+      <p style="margin:6px 0">Bands: <b>HEALTHY</b> score &lt; ${st.warn} · <b>WARNING</b> ${st.warn}–${st.crit} · <b>CRITICAL</b> &gt; ${st.crit}.
+      A band change must persist ${st.debounce_samples} samples, and an alarm only clears once the score is ${st.deadband} below its threshold (deadband). Float LOW overrides to <b>DRY-RUN PROTECTION</b>;
+      RPM &lt; ${st.standby_rpm} is <b>STANDBY</b>; alarms are inhibited for ${st.startup_inhibit_s} s after a start.</p>
+      <p style="margin:6px 0">To use a trained model: <code>python tools/train_iforest.py logs/*.csv</code>, then start the backend with
+      <code>--model models/iforest.json</code>. The swap point is <code>load_scorer()</code> in <code>backend/scorer.py</code>.</p>`;
+  },
+};
+
+function featLabel(k) { return store.cfg.features.find((f) => f.key === k)?.label ?? k; }
+
+function arcPath(cx, cy, r, a0, a1) {
+  const p = (a) => [cx + r * Math.sin(a * Math.PI / 180), cy - r * Math.cos(a * Math.PI / 180)];
+  const [x0, y0] = p(a0), [x1, y1] = p(a1);
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+/* ======================================================================
+   RENDER
+   ====================================================================== */
+const render = {
+  all() { this.frame(); this.state(); this.alerts(); },
+  frame() { this.kpis(); this.trend(); this.sensors(); this.features(); this.pipeline(); this.topbar(); },
+  state() { this.controls(); this.pipeline(); this.topbar(); },
+
+  /* -------------------------------------------------------------- top bar */
+  topbar() {
+    const s = store.state, f = store.last, link = linkState();
+    // Overall status
+    const pill = $("statusPill");
+    let label = f ? f.status : (store.wsOpen ? "WAITING" : "NO DATA");
+    let cls = f ? STATUS_CLASS[f.status] : "idle";
+    pill.className = `pill ${cls}` + (link.bad && f ? " stale" : "");
+    pill.querySelector(".g").textContent = GLYPH[cls];
+    pill.querySelector(".t").textContent = label + (link.bad && f ? " (stale)" : "");
+    pill.title = link.bad ? "Last known status — data stream is not fresh" : "Overall system status";
+
+    // Source badge (always visible): SIMULATED DATA / LIVE DATA / REPLAY DATA / STALE / DISCONNECTED
+    const sp = $("sourcePill");
+    sp.className = `pill ${link.cls}`;
+    sp.querySelector(".g").textContent = link.cls === "good" ? "●" : link.cls === "warn" ? "◆" : "■";
+    sp.querySelector(".t").textContent = link.label;
+    sp.title = s ? `${s.source.toUpperCase()} · ${s.source_detail}` : "No connection to the Pi backend";
+
+    // Pump state
+    let pump = "—";
+    if (f) {
+      if (s?.sim?.tripped) pump = "TRIPPED · interlock";
+      else pump = f.running ? `RUNNING ${fmt(f.reading.rpm, 0, 4)} rpm` : "STOPPED";
+    }
+    $("tbPump").textContent = pump;
+    $("tbStream").textContent = !store.wsOpen ? "OFFLINE" : s?.paused ? "PAUSED" : `RUNNING ${fmt(s?.msg_rate_hz ?? 0, 2)} Hz`;
+    $("tbAge").textContent = link.age === null ? "—" : `${fmt(link.age, link.age < 100 ? 1 : 0, 5)} s ago`;
+  },
+
+  /* -------------------------------------------------------------- KPIs */
+  kpis() {
+    const f = store.last, frames = store.frames.slice(-UI.sparkLen), b = store.cfg.baseline;
+    // Gauge
+    const tile = $("k-health"), health = f?.health ?? null;
+    const hcls = f ? STATUS_CLASS[f.status] : "idle";
+    tile.className = `tile gauge-tile ${hcls}`;
+    setState(tile, hcls, f ? (f.status === "DRY-RUN PROTECTION" ? "DRY-RUN" : f.status) : "—");
+    const arc = $("gaugeArc");
+    arc.setAttribute("stroke-dashoffset", health === null ? 100 : 100 - health);
+    arc.setAttribute("stroke", `var(--${hcls === "idle" ? "idle" : hcls})`);
+    $("gaugeVal").textContent = health === null ? "—" : String(health).padStart(3, FS);
+
+    for (const k of KPIS) {
+      if (k.kind === "gauge") continue;
+      const el = $(`k-${k.id}`), v = f ? k.get(f) : null;
+      let cls, lab;
+      if (k.id === "score") {
+        cls = f && f.score !== null ? STATUS_CLASS[f.status] === "idle" ? "idle" : bandOf(f.score) : "idle";
+        lab = f?.score == null ? (f?.status === "STARTING" ? `WAIT ${fmt(f.inhibit_left_s, 0)}s` : "—") : cls === "good" ? "LOW" : cls === "warn" ? "ELEVATED" : "HIGH";
+        el.querySelector(".t-sub").textContent = f?.scorer?.distance !== undefined ? `D = ${fmt(f.scorer.distance, 2)}σ` : f?.scorer?.raw !== undefined ? `raw ${fmt(f.scorer.raw, 3)}` : " ";
+      } else {
+        cls = f ? f.channels[k.ch] : "idle";
+        lab = STATE_LABEL[cls];
+        const base = b[k.base], d = v === null ? null : ((v - base) / base) * 100;
+        el.querySelector(".t-sub").textContent = `base ${fmt(base, k.dp)}  ${d === null ? "" : (d >= 0 ? "+" : "−") + fmt(Math.abs(d), 0) + "%"}`;
+      }
+      el.className = `tile ${cls}`;
+      setState(el, cls, lab);
+      el.querySelector(".v").textContent = fmt(v, k.dp, k.w);
+      const vals = frames.map(k.get);
+      const base = k.id === "score" ? null : b[k.base];
+      const [line, baseLine] = sparkPaths(vals, k.id === "score" ? [0, 1] : null, base);
+      el.querySelector(".line").setAttribute("d", line);
+      el.querySelector(".base").setAttribute("d", baseLine);
+    }
+  },
+
+  /* -------------------------------------------------------------- trend chart */
+  trend() { drawTrend(); },
+
+  /* -------------------------------------------------------------- sensors table */
+  sensors() {
+    const f = store.last;
+    for (const s of store.cfg.sensors) {
+      const row = $(`s-${s.id}`);
+      if (!row) continue;
+      const v = row.querySelector(".v"), sub = row.querySelector("td.r .sub");
+      let cls = f ? f.channels[s.id] : "idle", label = STATE_LABEL[cls];
+      if (!f) { v.textContent = "—"; sub.textContent = ""; }
+      else if (s.id === "vib") {
+        const r = f.reading;
+        v.textContent = fmt(r.vib_rms, 3, 6);
+        sub.textContent = `x${fmt(r.vib_x, 3)} y${fmt(r.vib_y, 3)} z${fmt(r.vib_z, 3)} pk${fmt(r.vib_peak, 2)}`;
+      } else if (s.id === "float") {
+        v.textContent = f.reading.float ? "1 · OK" : "0 · LOW";
+        sub.textContent = "interlock";
+        label = f.reading.float ? "OK" : "LOW";
+      } else {
+        v.textContent = fmt(f.reading[s.field], s.dp, 6);
+        sub.textContent = "";
+      }
+      row.querySelector(".dot").className = `dot ${cls}`;
+      row.querySelector(".l").textContent = label;
+    }
+  },
+
+  /* -------------------------------------------------------------- feature table */
+  features() {
+    const f = store.last;
+    for (const d of store.cfg.features) {
+      const row = $(`f-${d.key}`);
+      const val = f?.features?.[d.key] ?? null, z = f?.z?.[d.key] ?? null;
+      row.querySelector(".v").textContent = fmt(val, d.dp, 7);
+      row.querySelector(".z").textContent = z === null ? "—" : ((z >= 0 ? "+" : "−") + Math.abs(z).toFixed(1)).padStart(5, FS);
+      const bar = row.querySelector(".zbar i"), az = z === null ? 0 : Math.abs(z);
+      const half = clamp(az / 6, 0, 1) * 50;
+      bar.style.left = z === null ? "50%" : z >= 0 ? "50%" : `${50 - half}%`;
+      bar.style.width = `${half}%`;
+      bar.className = az >= store.cfg.status.channel_z_crit ? "crit" : az >= store.cfg.status.channel_z_warn ? "warn" : "";
+    }
+    const fill = f ? f.window_fill : 0;
+    $("featNote").textContent = `window ${fill}/${store.cfg.window} samples` + (f && !f.features ? (f.running ? " · filling" : " · pump stopped") : "");
+    $("scorerTag").textContent = store.state?.scorer?.kind === "iforest" ? "Isolation Forest (trained)" : "Demo scorer · stand-in for Isolation Forest";
+  },
+
+  /* -------------------------------------------------------------- pipeline */
+  pipeline() {
+    if (!store.cfg) return;
+    const f = store.last, s = store.state, link = linkState(), c = s?.counters;
+    const dl = (id, rows) => { $(`nl-${id}`).innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd class="num">${esc(v)}</dd>`).join(""); };
+    const dot = (id, cls, pulse) => { $(`nd-${id}`).className = `dot ${cls}${pulse ? " pulse" : ""}`; };
+    const fresh = !link.bad;
+
+    // Sensors
+    const ch = f ? Object.values(f.channels) : [];
+    const nBad = ch.filter((x) => x === "warn" || x === "crit").length;
+    dot("sensors", !f ? "idle" : ch.includes("crit") ? "crit" : nBad ? "warn" : f.running ? "good" : "idle");
+    dl("sensors", [["channels", f ? `${ch.length - nBad} ok · ${nBad} dev` : "—"], ["float", f ? (f.reading.float ? "OK" : "LOW") : "—"]]);
+
+    // ESP32 / transport
+    dot("esp32", link.cls, fresh && f);
+    dl("esp32", [
+      ["link", s ? (s.source === "sim" ? "simulated" : s.source === "replay" ? "replay" : s.source) : "—"],
+      ["rate", s ? `${fmt(s.msg_rate_hz, 2)} Hz` : "—"],
+      ["seq", f?.reading.seq ?? f?.reading.ts ?? "—"],
+    ]);
+
+    // Pi preprocessing
+    dot("pi", !c ? "idle" : c.invalid || c.dropped ? "warn" : fresh ? "good" : "idle");
+    dl("pi", [
+      ["valid", c ? c.valid : "—"],
+      ["invalid / drop", c ? `${c.invalid} / ${c.dropped}` : "—"],
+      ["window", f ? `${f.window_fill}/${store.cfg.window} · 12 feat` : "—"],
+    ]);
+
+    // Model
+    const sc = f?.score ?? null;
+    dot("model", sc === null ? "idle" : bandOf(sc));
+    dl("model", [["model", s?.scorer?.kind === "iforest" ? "IF (trained)" : "demo (IF stand-in)"], ["score", fmt(sc, 3)]]);
+
+    // Health
+    const hc = f ? STATUS_CLASS[f.status] : "idle";
+    dot("health", hc);
+    dl("health", [["index", f?.health ?? "—"], ["status", f ? f.status.replace(" PROTECTION", "") : "—"]]);
+
+    // HMI
+    const nCrit = store.alerts.filter((a) => a.sev === "crit").length;
+    dot("hmi", store.wsOpen ? (nCrit && hc === "crit" ? "crit" : "good") : "crit");
+    dl("hmi", [["socket", store.wsOpen ? "open" : "closed"], ["alerts", `${store.alerts.length} (${nCrit} crit)`], ["CSV", s?.logging?.enabled ? "logging" : "off"]]);
+
+    document.querySelectorAll(".node").forEach((n, i) => n.classList.toggle("flow", fresh && !!f && i < 5));
+  },
+
+  /* -------------------------------------------------------------- controls */
+  controls() {
+    const s = store.state;
+    if (!s || !store.cfg) return;
+    const isSim = s.source === "sim";
+    $("srcSel").value = s.source;
+    $("srcConn").textContent = s.source_connected ? "connected" : "not connected";
+    $("srcDetail").textContent = s.source_detail;
+    const err = $("srcErr");
+    err.hidden = !s.source_error; err.textContent = s.source_error || "";
+
+    $("replayBox").hidden = s.source !== "replay";
+    const rs = $("replaySel"), files = s.replay.files;
+    if (rs.dataset.files !== files.join("|")) {
+      rs.innerHTML = files.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+      rs.dataset.files = files.join("|");
+    }
+    rs.value = s.replay.file;
+    $("replayPos").textContent = s.replay.position ? `row ${s.replay.position[0]} / ${s.replay.position[1]}` : "";
+
+    $("scenSet").disabled = !isSim;
+    $("valveSet").disabled = !isSim;
+    $("scenNote").textContent = isSim ? "simulator" : "SIM source only";
+    if (isSim) {
+      const r = document.querySelector(`input[name=scen][value="${s.sim.scenario}"]`);
+      if (r && !r.checked) r.checked = true;
+      if (document.activeElement !== $("valve") && !valveDirty) {
+        $("valve").value = s.sim.valve_pct;
+        $("valveVal").textContent = `${String(s.sim.valve_pct).padStart(3, FS)} % closed`;
+      }
+    }
+    const pb = $("pumpBtn");
+    pb.disabled = !isSim;
+    const running = isSim && s.sim.pump_cmd && !s.sim.tripped;
+    pb.textContent = running ? "■ Stop pump" : "▶ Start pump";
+    pb.classList.toggle("on", running);
+    $("pumpNote").textContent = !isSim ? "Pump has no actuator on the live rig — controls drive the simulator only."
+      : s.sim.tripped ? "Dry-run interlock latched. Restore inlet level, then press Start to reset." : "";
+    const pz = $("pauseBtn");
+    pz.textContent = s.paused ? "▶ Resume stream" : "❚❚ Pause stream";
+    pz.classList.toggle("on", s.paused);
+
+    $("logChk").checked = s.logging.enabled;
+    $("logPath").textContent = s.logging.enabled ? s.logging.path : `off · files go to ${s.logging.dir}`;
+    $("logRows").textContent = s.logging.enabled ? `${s.logging.rows} rows` : "";
+
+    const c = s.counters;
+    $("counters").innerHTML = [["rx", c.received], ["valid", c.valid], ["invalid", c.invalid, c.invalid > 0], ["dropped", c.dropped, c.dropped > 0], ["skipped", c.skipped]]
+      .map(([k, v, bad]) => `<div class="${bad ? "bad" : ""}"><small>${k}</small><span class="num">${v}</span></div>`).join("");
+    const reasons = Object.entries(c.invalid_by_reason).map(([k, v]) => `${k}:${v}`).join("  ");
+    $("lastInvalid").textContent = c.last_invalid ? `last reject: ${c.last_invalid.reason} ${c.last_invalid.detail}  ·  ${reasons}` : "";
+  },
+
+  /* -------------------------------------------------------------- alerts */
+  alerts() {
+    const list = store.alerts;
+    const n = (sev) => list.filter((a) => a.sev === sev).length;
+    $("alertCounts").textContent = `${n("crit")} crit · ${n("warn")} warn · ${n("info")} info`;
+    $("alertList").innerHTML = list.length ? list.map((a) => `
+      <li class="${a.sev}"><span class="time num">${hhmmss(a.t)}</span><span class="sev">${a.sev === "crit" ? "✕ CRIT" : a.sev === "warn" ? "▲ WARN" : "● INFO"}</span><span class="msg">${esc(a.msg)}</span></li>`).join("")
+      : `<li class="empty">No alerts yet.</li>`;
+  },
+};
+
+function setState(tile, cls, label) {
+  tile.querySelector(".t-state .g").textContent = GLYPH[cls] || "○";
+  tile.querySelector(".t-state .s").textContent = label;
+}
+
+function bandOf(score) {
+  const st = store.cfg.status;
+  return score > st.crit ? "crit" : score >= st.warn ? "warn" : "good";
+}
+
+/** Link state from the browser's point of view (covers a hung server too). */
+function linkState() {
+  const s = store.state;
+  const age = store.lastFrameAt ? (performance.now() - store.lastFrameAt) / 1000 : null;
+  if (!store.wsOpen) return { label: "DISCONNECTED", cls: "crit", bad: true, age };
+  if (!s) return { label: "CONNECTING", cls: "idle", bad: true, age };
+  if (s.paused) return { label: "PAUSED", cls: "warn", bad: false, age };
+  const staleAfter = store.cfg?.link?.stale_after_s ?? 3;
+  if (age === null || age > staleAfter) {
+    const what = s.source_connected || s.source === "sim" ? "STALE" : "DISCONNECTED";
+    return { label: age === null ? `${what} · no data` : `${what} ${fmt(age, 0)} s`, cls: "crit", bad: true, age };
+  }
+  if (s.source === "sim") return { label: "SIMULATED DATA", cls: "warn", bad: false, age };
+  if (s.source === "replay") return { label: "REPLAY DATA", cls: "warn", bad: false, age };
+  return { label: "LIVE DATA", cls: "good", bad: false, age };
+}
+
+function sparkPaths(vals, fixed, base) {
+  const n = UI.sparkLen;
+  const nums = vals.filter((v) => v !== null && v !== undefined);
+  if (!nums.length) return ["", ""];
+  let lo = fixed ? fixed[0] : Math.min(...nums, base ?? Infinity), hi = fixed ? fixed[1] : Math.max(...nums, base ?? -Infinity);
+  if (hi - lo < 1e-9) { hi += 1e-3; lo -= 1e-3; }
+  const pad = (hi - lo) * 0.12; lo -= fixed ? 0 : pad; hi += fixed ? 0 : pad;
+  const off = n - vals.length;
+  const x = (i) => ((i + off) / (n - 1)) * 100, y = (v) => 25 - ((v - lo) / (hi - lo)) * 24;
+  let d = "", pen = false;
+  vals.forEach((v, i) => {
+    if (v === null || v === undefined) { pen = false; return; }
+    d += `${pen ? "L" : "M"}${x(i).toFixed(2)} ${y(v).toFixed(2)}`; pen = true;
+  });
+  const bd = base === null || base === undefined ? "" : `M0 ${y(base).toFixed(2)}L100 ${y(base).toFixed(2)}`;
+  return [d, bd];
+}
+
+/* ======================================================================
+   TREND CHART (hand-rolled SVG)
+   ====================================================================== */
+const chart = { w: 600, h: 280, hover: null, m: { l: 50, r: 62, t: 14, b: 30 } };
+
+function niceTicks(lo, hi, count = 5) {
+  const span = hi - lo, raw = span / count, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((s) => span / s <= count) || 10 * mag;
+  const ticks = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) ticks.push(+v.toFixed(10));
+  return { ticks, step };
+}
+
+function drawTrend() {
+  const svg = $("chart");
+  if (!store.cfg) return;
+  const M = METRICS[store.metric], frames = store.frames, n = UI.trendLen;
+  const W = chart.w = svg.clientWidth || 600, H = chart.h = svg.clientHeight || 280, m = chart.m;
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const vals = frames.map(M.get);
+  const nums = vals.filter((v) => v !== null && v !== undefined);
+  const base = M.base ? store.cfg.baseline[M.base] : null;
+
+  let lo, hi;
+  if (M.fixed) [lo, hi] = M.fixed;
+  else {
+    lo = Math.min(...nums, base); hi = Math.max(...nums, base);
+    const pad = Math.max((hi - lo) * 0.15, Math.abs(base || 1) * 0.02);
+    lo -= pad; hi += pad;
+    if (lo < 0 && Math.min(...nums, 0) >= 0) lo = 0;
+  }
+  const { ticks } = niceTicks(lo, hi, ph < 180 ? 4 : 5);
+  if (!M.fixed) { lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]); }
+  const off = n - vals.length;
+  const X = (i) => m.l + ((i + off) / (n - 1)) * pw;
+  const Y = (v) => m.t + ph - ((v - lo) / (hi - lo)) * ph;
+  chart.X = X; chart.Y = Y; chart.vals = vals; chart.off = off;
+
+  const dt = store.cfg.link.expected_interval_s;
+  let g = `<g class="grid">`;
+  ticks.forEach((t) => { g += `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>`; });
+  const xt = [0, 30, 60, 90, 119];
+  xt.forEach((s) => { const x = m.l + (s / (n - 1)) * pw; g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${m.t}" y2="${m.t + ph}"/>`; });
+  g += `</g><g class="axis">`;
+  const tdp = Math.max(0, -Math.floor(Math.log10((ticks[1] - ticks[0]) || 1)) + (((ticks[1] - ticks[0]) / 10 ** Math.floor(Math.log10(ticks[1] - ticks[0] || 1))) % 1 ? 1 : 0));
+  ticks.forEach((t) => { g += `<text x="${m.l - 6}" y="${(Y(t) + 3.5).toFixed(1)}" text-anchor="end">${t.toFixed(Math.min(tdp, 3))}</text>`; });
+  xt.forEach((s) => {
+    const x = m.l + (s / (n - 1)) * pw, ago = Math.round((n - 1 - s) * dt);
+    g += `<text x="${x.toFixed(1)}" y="${H - m.b + 16}" text-anchor="${s === 0 ? "start" : s === 119 ? "end" : "middle"}">${ago ? `−${ago} s` : "now"}</text>`;
+  });
+  g += `<text class="axis-title" x="${m.l}" y="${m.t - 4}" text-anchor="start" style="display:none"></text></g>`;
+  g += `<text class="axis-title" transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">${esc(M.label)}${M.unit ? ` (${M.unit})` : ""}</text>`;
+
+  // Thresholds / baseline
+  if (M.thresholds) {
+    const st = store.cfg.status;
+    g += `<line class="th-warn" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.warn)}" y2="${Y(st.warn)}"/>`;
+    g += `<line class="th-crit" x1="${m.l}" x2="${m.l + pw}" y1="${Y(st.crit)}" y2="${Y(st.crit)}"/>`;
+    g += `<text class="th-label" x="${m.l + 4}" y="${Y(st.warn) - 4}">▲ WARN ${st.warn.toFixed(2)}</text>`;
+    g += `<text class="th-label" x="${m.l + 4}" y="${Y(st.crit) - 4}">✕ CRIT ${st.crit.toFixed(2)}</text>`;
+  } else if (base !== null) {
+    g += `<line class="base" x1="${m.l}" x2="${m.l + pw}" y1="${Y(base)}" y2="${Y(base)}"/>`;
+    g += `<text class="th-label" x="${m.l + 4}" y="${Y(base) - 4}">baseline ${fmt(base, M.dp)}</text>`;
+  }
+
+  // Series (gaps where value is null, e.g. score while pump is stopped)
+  let d = "", area = "", seg = [];
+  const flush = () => {
+    if (seg.length > 1) area += `M${seg[0][0]} ${m.t + ph}` + seg.map(([x, y]) => `L${x} ${y}`).join("") + `L${seg[seg.length - 1][0]} ${m.t + ph}Z`;
+    seg = [];
+  };
+  vals.forEach((v, i) => {
+    if (v === null || v === undefined) { flush(); return; }
+    const x = X(i).toFixed(1), y = Y(clamp(v, lo, hi)).toFixed(1);
+    d += `${seg.length ? "L" : "M"}${x} ${y}`; seg.push([x, y]);
+  });
+  flush();
+  g += `<path class="area" d="${area}"/><path class="series" d="${d}"/>`;
+
+  // Endpoint marker
+  const li = vals.length - 1, lv = vals[li];
+  if (lv !== null && lv !== undefined) {
+    const ex = X(li), ey = Y(clamp(lv, lo, hi));
+    g += `<circle class="end" cx="${ex}" cy="${ey}" r="4.5"/>`;
+    g += `<text class="end-label" x="${ex + 8}" y="${ey + 4}">${fmt(lv, M.dp)}</text>`;
+  }
+  if (!nums.length) {
+    g += `<text class="empty" x="${m.l + pw / 2}" y="${m.t + ph / 2}" text-anchor="middle">${frames.length ? "No value — pump stopped or window filling" : "Waiting for data…"}</text>`;
+  }
+
+  // Hover layer
+  if (chart.hover !== null && vals[chart.hover] !== undefined) {
+    const i = chart.hover, x = X(i), v = vals[i];
+    g += `<line class="cross" x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t + ph}"/>`;
+    if (v !== null) g += `<circle class="hover-dot" cx="${x}" cy="${Y(clamp(v, lo, hi))}" r="4"/>`;
+  }
+  g += `<rect id="hit" x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="transparent"/>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = g;
+  svg.setAttribute("aria-label", `${M.label} trend, last ${frames.length} samples, latest ${fmt(lv, M.dp)} ${M.unit}`);
+  updateTip();
+
+  // Meta strip
+  const last = nums.length ? nums[nums.length - 1] : null;
+  const mn = nums.length ? Math.min(...nums) : null, mx = nums.length ? Math.max(...nums) : null;
+  const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+  $("trendTitle").textContent = `${M.label}${M.unit ? ` · ${M.unit}` : ""} · ${frames.length}/${n} samples`;
+  $("trendMeta").innerHTML = [["last", last], ["min", mn], ["max", mx], ["mean", avg]]
+    .map(([k, v]) => `<span>${k} <span class="num">${fmt(v, M.dp)}</span></span>`).join("") +
+    (base !== null ? `<span>baseline <span class="num">${fmt(base, M.dp)}</span></span>` : "");
+}
+
+function updateTip() {
+  const tip = $("tip"), i = chart.hover;
+  const f = i === null ? null : store.frames[i];
+  if (!f) { tip.style.display = "none"; return; }
+  const M = METRICS[store.metric], v = M.get(f);
+  tip.innerHTML = `<span class="num muted">${hhmmss(f.t)}</span><br><b class="num">${fmt(v, M.dp)}</b> ${M.unit} <span class="muted">· ${esc(f.status)}</span>`;
+  tip.style.display = "block";
+  const wrap = $("chartWrap").getBoundingClientRect(), svgR = $("chart").getBoundingClientRect();
+  const x = chart.X(i) * (svgR.width / chart.w) + (svgR.left - wrap.left);
+  const tw = tip.offsetWidth;
+  tip.style.left = `${clamp(x + 12, 4, wrap.width - tw - 4)}px`;
+  tip.style.top = `14px`;
+}
+
+function onChartMove(ev) {
+  const svg = $("chart"), r = svg.getBoundingClientRect(), m = chart.m;
+  const xv = ((ev.clientX - r.left) / r.width) * chart.w;
+  if (xv < m.l - 6 || xv > chart.w - m.r + 6 || !store.frames.length) { chart.hover = null; drawTrend(); return; }
+  const n = UI.trendLen, pw = chart.w - m.l - m.r;
+  const slot = Math.round(((xv - m.l) / pw) * (n - 1));
+  chart.hover = clamp(slot - chart.off, 0, store.frames.length - 1);
+  drawTrend();
+}
+
+/* ======================================================================
+   INPUT WIRING
+   ====================================================================== */
+let valveDirty = false, valveTimer = null;
+function wire() {
+  $("metricSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-m]"); if (!b) return;
+    store.metric = b.dataset.m; chart.hover = null;
+    document.querySelectorAll("#metricSeg button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    drawTrend();
+  });
+  const svg = $("chart");
+  svg.addEventListener("pointermove", onChartMove);
+  svg.addEventListener("pointerleave", () => { chart.hover = null; drawTrend(); });
+  new ResizeObserver(() => drawTrend()).observe($("chartWrap"));
+
+  $("srcSel").addEventListener("change", (e) => transport.send("set_source", e.target.value));
+  $("replaySel").addEventListener("change", (e) => transport.send("set_replay_file", e.target.value));
+  $("scenList").addEventListener("change", (e) => { if (e.target.name === "scen") transport.send("set_scenario", e.target.value); });
+  $("valve").addEventListener("input", (e) => {
+    valveDirty = true;
+    $("valveVal").textContent = `${String(e.target.value).padStart(3, FS)} % closed`;
+    clearTimeout(valveTimer);
+    valveTimer = setTimeout(() => { transport.send("set_valve", Number(e.target.value)); valveDirty = false; }, UI.valveSendMs);
+  });
+  $("pumpBtn").addEventListener("click", () => {
+    const s = store.state?.sim; if (!s) return;
+    transport.send("set_pump", !(s.pump_cmd && !s.tripped));
+  });
+  $("pauseBtn").addEventListener("click", () => transport.send("set_paused", !store.state?.paused));
+  $("logChk").addEventListener("change", (e) => transport.send("set_logging", e.target.checked));
+  $("resetCnt").addEventListener("click", () => transport.send("reset_counters", true));
+
+  $("themeBtn").addEventListener("click", () => {
+    const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem("phc-theme", t); } catch {}
+  });
+  try { const t = localStorage.getItem("phc-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+
+  // Clock + link age (1 Hz is enough for both).
+  const tick = () => {
+    const d = new Date();
+    $("tbClock").textContent = d.toLocaleTimeString([], { hour12: false });
+    $("tbDate").textContent = d.toLocaleDateString([], { year: "numeric", month: "short", day: "2-digit" });
+    if (store.cfg) { render.topbar(); render.pipeline(); }
+  };
+  tick(); setInterval(tick, 1000);
+}
+
+wire();
+transport.connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# Training machine only (tools/train_iforest.py). The Pi runs the exported JSON in pure Python.
+-r requirements.txt
+numpy>=1.26
+scikit-learn>=1.4
