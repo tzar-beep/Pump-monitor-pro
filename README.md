@@ -86,7 +86,7 @@ It is deep-merged over `CONFIG`:
 
 | Section | What it shows |
 |---|---|
-| Top bar | Overall status (HEALTHY / WARNING / CRITICAL / DRY-RUN PROTECTION / STANDBY / STARTING), an **alarm pill** (flashes while a HIGH-priority alarm is unacknowledged; click it to jump to the list), pump state, detected USB device, stream rate, time since the last valid message, clock. The **source badge is always visible**: `LIVE DATA` (green), `SIMULATED DATA` / `REPLAY DATA` (amber), `STALE n s` / `DISCONNECTED` (red). |
+| Top bar | Overall status (HEALTHY / WARNING / CRITICAL / DRY-RUN PROTECTION / STANDBY / STARTING), an **alarm pill** (flashes while a HIGH-priority alarm is unacknowledged; click it to jump to the list), pump state, detected USB device, stream rate, time since the last valid message, clock, and a **Dark / Light / System** theme switch (remembered per browser; System follows the OS setting live). The **source badge is always visible**: `LIVE DATA` (green), `SIMULATED DATA` / `REPLAY DATA` (amber), `STALE n s` / `DISCONNECTED` (red). |
 | KPI row | Health-index gauge, anomaly score (AI-101) and the six physical channels, each with its instrument tag, unit, baseline delta and a 60-sample sparkline. The tile colour comes from the channel's state (the largest \|z\| among its features), never from the accent colour. |
 | Process schematic | A P&ID of the rig: sump T-101 with low-level switch LSL-101, pump P-101 with motor M-101, discharge line with PT-101, FT-101 and hand valve HV-101, and instrument bubbles for VT/ST/IT/TT-101. Live readouts sit next to each instrument, with a border coloured by channel state. Pipes animate while water flows, the impeller spins while the pump runs, the pump goes red on a fault or trip, the tank level follows the float switch, and a duty-point block shows Q, head, hydraulic power and efficiency. |
 | Diagnosis | Which fault most likely explains the anomaly: outlet restriction, imbalance, overload, cavitation or dry run. Shows a confidence, the strongest feature deviations, a **recommended action**, and every hypothesis ranked. It uses rule-based signature matching (cosine similarity of the z-vector against each fault's signature) and is labelled that way. |
@@ -306,6 +306,9 @@ data/      sample_session.csv  (simulated session for replay/training demos)
 models/    iforest.json        (demo model trained on simulated data)
 logs/      CSV session logs (git-ignored)
 ```
+
+**Port already in use?** If another app on the machine already listens on port 8000, start the
+console on a different port, e.g. `python -m backend --port 8010`, and open `http://localhost:8010`.
 
 The only external request is the IBM Plex font from Google Fonts. Without internet access
 (for example a Pi on an isolated network), the page falls back to system fonts.
