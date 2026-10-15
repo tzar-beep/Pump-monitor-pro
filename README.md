@@ -84,21 +84,20 @@ It is deep-merged over `CONFIG`:
 
 ## The dashboard
 
-| Section | What it shows |
+One screen, kept deliberately simple:
+
+| Part | What it shows |
 |---|---|
-| Top bar | Overall status (HEALTHY / WARNING / CRITICAL / DRY-RUN PROTECTION / STANDBY / STARTING), an **alarm pill** (flashes while a HIGH-priority alarm is unacknowledged; click it to jump to the list), pump state, detected USB device, stream rate, time since the last valid message, clock, and a **Dark / Light / System** theme switch (remembered per browser; System follows the OS setting live). The **source badge is always visible**: `LIVE DATA` (green), `SIMULATED DATA` / `REPLAY DATA` (amber), `STALE n s` / `DISCONNECTED` (red). |
-| KPI row | Health-index gauge, anomaly score (AI-101) and the six physical channels, each with its instrument tag, unit, baseline delta and a 60-sample sparkline. The tile colour comes from the channel's state (the largest \|z\| among its features), never from the accent colour. |
-| Process schematic | A P&ID of the rig: sump T-101 with low-level switch LSL-101, pump P-101 with motor M-101, discharge line with PT-101, FT-101 and hand valve HV-101, and instrument bubbles for VT/ST/IT/TT-101. Live readouts sit next to each instrument, with a border coloured by channel state. Pipes animate while water flows, the impeller spins while the pump runs, the pump goes red on a fault or trip, the tank level follows the float switch, and a duty-point block shows Q, head, hydraulic power and efficiency. |
-| Diagnosis | Which fault most likely explains the anomaly: outlet restriction, imbalance, overload, cavitation or dry run. Shows a confidence, the strongest feature deviations, a **recommended action**, and every hypothesis ranked. It uses rule-based signature matching (cosine similarity of the z-vector against each fault's signature) and is labelled that way. |
-| Engineering values | Hydraulic power (Δp·Q), estimated electrical input (V·I·PF), wire-to-water efficiency, pump head, specific energy (Wh/m³), motor slip, vibration crest factor and deviation from the pump curve. Session totals: run time, starts, kWh, litres pumped. |
-| Trend | **All channels** (default): stacked strip charts, one row per channel with a shared time axis, like a chart recorder, and a single crosshair whose tooltip lists every value at that instant. Or a single metric with grid, axis labels, HI/HIHI threshold lines (score) or baseline, and an endpoint marker. |
-| Operating point | Outlet pressure vs flow drawn on the pump curve H = h0·(n/n0)² − k·Q², with the design point, a 60-sample trail, and the curve redrawn at the actual speed (affinity law). A restriction pushes the point left and up the curve; overload or cavitation drop it below. |
-| Edge node | The Pi itself: uptime, CPU %, load average, memory, SoC temperature, pipeline latency per message (avg/max), data quality (valid/received), scorer, Python version. |
-| Pipeline | Sensors → ESP32 → Pi 5 → Isolation Forest → Health index → HMI. Each node shows its live state: channel health, link and rate, valid/invalid/dropped counts, window fill, score and **inference latency**, and alarm counts. |
-| Alarms | Alarm management in the ISA-18.2 style. **Active alarm list**: tag (AI-101.HI / AI-101.HIHI, LSL-101.LO, FT/PT/IT/TT/ST/VT-101.DEV, COMM-101.FAIL), priority, state (ACTIVE·UNACK, ACTIVE·ACK, RTN·UNACK), value, and **ACK** / **ACK ALL**. Alarm state lives on the Pi, so every connected screen sees the same list. Next to it is the **event log** of status changes, float events, link loss and recovery, operator ACKs and commands. |
-| Controls | Source selector (Auto / Sim / Serial / MQTT / Replay) with the USB scan list, scenario cards with expected signatures, valve slider, pump start/stop, stream pause, CSV logging with the file path, and message counters. |
-| Sensors | One row per instrument: tag, part, ESP32 channel, live reading, unit, valid range, status, and the ML features it feeds. The float switch is marked as a safety interlock, not an ML input. |
-| Feature vector | The 12 window features with value, healthy baseline, tolerance σ, z-score and a deviation bar. The section below explains the score, diagnosis and engineering formulas. |
+| Header | Overall status (Healthy / Warning / Critical / Dry-run protection / Standby), the data source (**LIVE**, **SIMULATED**, **REPLAY**, or **NO DATA** / **DISCONNECTED** in red) with the time since the last reading, and a Dark / Light / System theme switch. |
+| Pump health | A health gauge (0–100), the status in words and, when something is wrong, the **likely cause** with a suggested fix (e.g. *Outlet restriction / blockage (97%) — check the discharge valve and outlet line*). Also shows the pump state and the anomaly score. |
+| Sensor cards | Speed, flow, pressure, motor current, temperature and vibration: live value, normal value, a one-minute sparkline, and a coloured dot (green / amber / red). |
+| Trend | The last 2 minutes of the anomaly score (with warning and critical lines) or any one sensor, with a hover readout. |
+| Controls | Fault buttons for the simulator (Normal, Blockage, Imbalance, Overload, Dry run), outlet valve slider, pump start/stop, pause, and the data-source picker. When no ESP32 is attached it says so. |
+| Recent events | Plain-language log: "Critical — anomaly score 0.96 (flow and pressure unusual)", "Back to healthy", "ESP32 connected on COM5 — showing live data", … |
+| System details (collapsed) | For the report and demo: the data pipeline, the scoring formula, the 12-feature vector with each feature's deviation, the sensor list, message counters and the CSV-logging switch. |
+
+The Pi backend still computes more than the page shows (engineering values, ISA-style alarm states,
+edge-node stats); it is all in the WebSocket `frame` / `state` messages if you want to add it back.
 
 ## What is simulated
 

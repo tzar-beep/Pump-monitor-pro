@@ -29,6 +29,8 @@ from .sources import AutoSource, MqttSource, ReplaySource, SerialSource, SimSour
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web", "index.html")
 SOURCES = ("auto", "sim", "serial", "mqtt", "replay")
+SOURCE_WORD = {"auto": "auto (ESP32 when plugged in)", "sim": "simulator", "serial": "ESP32 over USB",
+               "mqtt": "ESP32 over Wi-Fi", "replay": "replay"}
 LINK_LABEL = {"sim": "SIMULATED", "replay": "REPLAY", "live": "LIVE", "stale": "STALE",
               "disconnected": "DISCONNECTED", "paused": "PAUSED"}
 
@@ -116,7 +118,7 @@ class Hub:
         self.history.clear()
         self.task = asyncio.create_task(self._run_source(new))
         if announce:
-            await self._alert(make_alert(time.time(), "info", f"Source switched to {kind.upper()} ({new.detail})"))
+            await self._alert(make_alert(time.time(), "info", f"Data source: {SOURCE_WORD[kind]}"))
             await self.broadcast(self.hello())
 
     async def _went_live(self, ser):
@@ -129,7 +131,7 @@ class Hub:
         self.paused = False
         if self.logger.enabled:
             self.logger.start("serial")          # keep real data in its own CSV
-        a = make_alert(time.time(), "info", f"ESP32 detected on {ser.port} ({ser.device}) — LIVE data")
+        a = make_alert(time.time(), "info", f"ESP32 connected on {ser.port} — showing live data")
         a["toast"] = "good"
         await self._alert(a)
         await self.broadcast(self.hello())
@@ -163,9 +165,6 @@ class Hub:
         await self.broadcast(frame)
         for a in res["alerts"]:
             await self._alert(a)
-        for kind, al in events:
-            if al["tag"].endswith(".DEV") and kind == "raise":
-                await self._alert(make_alert(now, "warn", f"ALARM {al['tag']} — {al['desc']} (|z| {al['value']})"))
         if events:
             await self.broadcast(self.state(now))
 
@@ -192,10 +191,10 @@ class Hub:
             if link != self.link:
                 a = None
                 if link in ("stale", "disconnected") and self.link in ("sim", "replay", "live"):
-                    a = make_alert(now, "warn", f"Data stream {LINK_LABEL[link]} ({self.source.detail})")
+                    a = make_alert(now, "warn", "Lost connection to the ESP32" if self.source.live else "Data stopped")
                     a["toast"] = "crit" if self.source.live else None
                 elif fresh and self.link in ("stale", "disconnected") and self.was_fresh:
-                    a = make_alert(now, "info", f"Data stream restored ({LINK_LABEL[link]}, {self.source.detail})")
+                    a = make_alert(now, "info", "Connection restored")
                     a["toast"] = "good" if self.source.live else None
                 if a:
                     await self._alert(a)
@@ -319,22 +318,22 @@ class Hub:
         elif cmd == "set_scenario":
             self.sim.set_scenario(str(val))
             label = self.cfg["simulator"]["scenarios"][val]["label"]
-            await self._alert(make_alert(time.time(), "info", f"Simulator scenario → {label}"))
+            await self._alert(make_alert(time.time(), "info", f"Simulating: {label}"))
         elif cmd == "set_valve":
             self.sim.set_valve(float(val))
         elif cmd == "set_pump":
             self.sim.set_pump(bool(val))
-            await self._alert(make_alert(time.time(), "info", f"Pump {'START' if val else 'STOP'} command (simulator)"))
+            await self._alert(make_alert(time.time(), "info", f"Pump {'start' if val else 'stop'} pressed"))
         elif cmd == "set_paused":
             self.paused = bool(val)
             await self._alert(make_alert(time.time(), "info", "Stream paused" if self.paused else "Stream resumed"))
         elif cmd == "set_logging":
             if val:
                 self.logger.start(self.source.kind)
-                await self._alert(make_alert(time.time(), "info", f"CSV logging → {self.logger.path}"))
+                await self._alert(make_alert(time.time(), "info", "Saving readings to CSV"))
             else:
                 self.logger.stop()
-                await self._alert(make_alert(time.time(), "info", "CSV logging stopped"))
+                await self._alert(make_alert(time.time(), "info", "Stopped saving readings"))
         elif cmd == "set_replay_file":
             if val not in self.replay_files():
                 raise ValueError("unknown replay file")
@@ -346,7 +345,7 @@ class Hub:
         elif cmd in ("ack_alarm", "ack_all"):
             done = self.alarm_mgr.ack(None if cmd == "ack_all" else str(val))
             if done:
-                await self._alert(make_alert(time.time(), "info", f"Operator ACK: {', '.join(done)}"))
+                await self._alert(make_alert(time.time(), "info", f"Acknowledged: {', '.join(done)}"))
         else:
             raise ValueError(f"unknown command {cmd!r}")
         await self.broadcast(self.state())

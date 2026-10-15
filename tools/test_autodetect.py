@@ -92,7 +92,7 @@ async def main():
         st, alerts, _ = await watch(ws, 20, until=lambda s: s["link"] == "live")
         dt = time.monotonic() - t0
         check(st["source"] == "serial" and st["link"] == "live", f"switched to LIVE automatically ({dt:.1f} s after plug-in)")
-        check(any(a.get("toast") == "good" and "ESP32 detected" in a["msg"] for a in alerts), "toast: 'ESP32 detected … LIVE data'")
+        check(any(a.get("toast") == "good" and "ESP32 connected" in a["msg"] for a in alerts), "toast: 'ESP32 connected … live data'")
         check(st["serial"]["connected"] and st["serial"]["port"].startswith("socket://"), f"device shown: {st['source_detail']}")
         st, _, frames = await watch(ws, 8)
         check(frames >= 5 and st["link"] == "live", f"live frames keep flowing ({frames} in 8 s)")

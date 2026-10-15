@@ -19,6 +19,8 @@ SEVERITY = {HEALTHY: "info", STANDBY: "info", STARTING: "info", WARNING: "warn",
             CRITICAL: "crit", DRY_RUN: "crit"}
 
 _alert_ids = itertools.count(1)
+SENSOR_WORD = {"hall": "speed", "current": "current", "temp": "temperature", "flow": "flow",
+               "pressure": "pressure", "vib": "vibration"}
 
 
 def make_alert(now, sev, msg, status=None):
@@ -86,7 +88,7 @@ class Processor:
             if self.last_ts - ts < link["ts_reset_back_ms"]:
                 raise Invalid("ts_order", f"ts {ts} <= {self.last_ts}")
             # Large backwards jump: the ESP32 rebooted (millis() restarted).
-            alerts.append(make_alert(now, "warn", "Device timestamp reset — ESP32 reboot assumed; window cleared"))
+            alerts.append(make_alert(now, "warn", "ESP32 restarted"))
             self.window.clear()
             self.last_seq = None
         elif self.last_ts is not None:
@@ -107,11 +109,11 @@ class Processor:
         # Float switch is a safety interlock, never an ML input.
         if self.prev_float is not None and r["float"] != self.prev_float:
             if r["float"] == 0:
-                alerts.append(make_alert(now, "crit", "Inlet level LOW — dry-run interlock tripped", DRY_RUN))
+                alerts.append(make_alert(now, "crit", "Water level LOW — dry-run protection tripped", DRY_RUN))
             else:
-                alerts.append(make_alert(now, "info", "Inlet level restored (float OK)"))
+                alerts.append(make_alert(now, "info", "Water level back to normal"))
         elif self.prev_float is None and r["float"] == 0:
-            alerts.append(make_alert(now, "crit", "Inlet level LOW at stream start", DRY_RUN))
+            alerts.append(make_alert(now, "crit", "Water level LOW", DRY_RUN))
         self.prev_float = r["float"]
 
         if running and not self.running:
@@ -202,17 +204,24 @@ class Processor:
         return self.band
 
     def _transition_alert(self, old, new, score, now, z):
+        """Plain-language event text for the dashboard's event list."""
         sev = SEVERITY[new]
-        text = {HEALTHY: "Status HEALTHY", WARNING: "Status WARNING — anomaly score elevated",
-                CRITICAL: "Status CRITICAL — anomaly score high", STANDBY: "Pump stopped — STANDBY",
-                STARTING: "Pump running — startup alarm inhibit", DRY_RUN: "DRY-RUN PROTECTION active"}[new]
+        text = {HEALTHY: "Healthy", WARNING: "Warning", CRITICAL: "Critical",
+                STANDBY: "Pump stopped", STARTING: "Pump started",
+                DRY_RUN: "Dry-run protection: pump stopped"}[new]
         if new == HEALTHY and old in (WARNING, CRITICAL):
-            text = f"Recovered to HEALTHY from {old}"
-        if score is not None and new in (WARNING, CRITICAL, HEALTHY):
-            text += f" (score {score:.2f})"
-        if z and new in (WARNING, CRITICAL):
-            top = sorted(z.items(), key=lambda kv: -abs(kv[1]))[:2]
-            text += " · top: " + ", ".join(f"{self.feat_by_key[k]['label']} z={v:+.1f}" for k, v in top)
+            text = "Back to healthy"
+        if score is not None and new in (WARNING, CRITICAL):
+            text += f" — anomaly score {score:.2f}"
+            if z:
+                names = []
+                for k, _ in sorted(z.items(), key=lambda kv: -abs(kv[1])):
+                    name = SENSOR_WORD[self.feat_by_key[k]["sensor"]]
+                    if name not in names:
+                        names.append(name)
+                    if len(names) == 2:
+                        break
+                text += f" ({' and '.join(names)} unusual)"
         return make_alert(now, sev, text, new)
 
     def _channel_states(self, r, z, running):
