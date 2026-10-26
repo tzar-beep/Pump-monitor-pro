@@ -5,3 +5,4 @@ logs/*.csv
 config.local.json
 .claude/
 build/
+.taste-skill/
