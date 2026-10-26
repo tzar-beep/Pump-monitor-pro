@@ -116,9 +116,14 @@ main {
 .health .big .v { font-size: 40px; font-weight: 500; letter-spacing: -.02em; line-height: 1.1; }
 .health .big .of { color: var(--ink-3); font-size: 14px; }
 .health .big .st { margin-left: auto; font-size: 14px; font-weight: 600; }
-.meter { position: relative; height: 4px; background: var(--line); margin: 10px 0 12px; }
-.meter i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--idle); transition: width .4s ease; }
-.meter .tick { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--ink-3); opacity: .6; }
+/* Notched linear gauge: one notch per 2.5 health points, filled in the status colour. */
+.gauge-lin { position: relative; margin: 12px 0 18px; }
+.notches { display: grid; grid-template-columns: repeat(40, minmax(0, 1fr)); gap: 3px; height: 16px; }
+.notches i { background: var(--line); border-radius: 1px; transition: background-color .3s ease; }
+.notches.good i.on { background: var(--good); } .notches.warn i.on { background: var(--warn); }
+.notches.crit i.on { background: var(--crit); } .notches.idle i.on { background: var(--idle); }
+.gauge-lin .tick { position: absolute; top: -3px; height: 22px; width: 1px; background: var(--ink-3); }
+.gauge-lin .tick span { position: absolute; top: 24px; transform: translateX(-50%); font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
 .cause { font-size: 13px; color: var(--ink-2); }
 .cause b { color: var(--ink); font-weight: 600; }
 .cause .act { display: block; margin-top: 4px; color: var(--ink-3); font-size: 12.5px; }
@@ -242,6 +247,7 @@ body.is-stale .metric .v, body.is-stale .health .big .v, body.is-stale #chart .s
   .metric:nth-child(n+3) { border-top: 1px solid var(--line); }
   .metric::before { display: none; }
   .metric .v { font-size: 21px; }
+  .notches { gap: 2px; }
   #chart { height: 220px; }
   .details-grid { grid-template-columns: minmax(0, 1fr); }
   .details-grid > div + div { border-left: 0; border-top: 1px solid var(--line); }
@@ -276,7 +282,10 @@ body.is-stale .metric .v, body.is-stale .health .big .v, body.is-stale #chart .s
     <div class="health">
       <div class="label">Health index</div>
       <div class="big"><span class="v num" id="hVal">—</span><span class="of">/ 100</span><span class="st" id="hStatus">—</span></div>
-      <div class="meter" aria-hidden="true"><i id="hBar"></i><span class="tick" id="tickWarn"></span><span class="tick" id="tickCrit"></span></div>
+      <div class="gauge-lin" aria-hidden="true">
+        <div class="notches idle" id="hNotches"></div>
+        <span class="tick" id="tickCrit"><span id="tickCritL"></span></span><span class="tick" id="tickWarn"><span id="tickWarnL"></span></span>
+      </div>
       <div class="cause" id="cause">Waiting for data.</div>
       <dl>
         <dt>Pump</dt><dd id="pumpState">—</dd>
@@ -462,8 +471,11 @@ function build() {
 
   const st = store.cfg.status, sc = store.cfg.scorer;
   // Health = (1 - score) * 100, so the score thresholds sit at these health values.
+  $("hNotches").innerHTML = "<i></i>".repeat(40);
   $("tickWarn").style.left = `${(1 - st.warn) * 100}%`;
   $("tickCrit").style.left = `${(1 - st.crit) * 100}%`;
+  $("tickWarnL").textContent = `${Math.round((1 - st.warn) * 100)} warning`;
+  $("tickCritL").textContent = `${Math.round((1 - st.crit) * 100)} critical`;
   $("winN").textContent = store.cfg.window;
   $("formula").textContent =
 `z      = (feature − normal) / tolerance
@@ -507,9 +519,9 @@ const render = {
     $("hVal").textContent = h === null ? "—" : String(h);
     $("hStatus").textContent = label;
     $("hStatus").className = `st c-${cls}`;
-    const bar = $("hBar");
-    bar.style.width = `${h ?? 0}%`;
-    bar.style.background = `var(--${cls === "idle" ? "idle" : cls})`;
+    const notches = $("hNotches"), lit = Math.round(((h ?? 0) / 100) * 40);
+    notches.className = `notches ${cls}`;
+    [...notches.children].forEach((n, i) => n.classList.toggle("on", i < lit));
 
     const d = f?.diagnosis;
     let cause = "Waiting for data.";
