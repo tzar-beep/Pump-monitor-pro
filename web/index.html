@@ -18,7 +18,7 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* Tokens. Accent = data lines and focus only; green / amber / red = status only. */
 :root, :root[data-theme="dark"] {
@@ -66,7 +66,7 @@ body {
   font: 13.5px/1.5 "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   -webkit-font-smoothing: antialiased; overflow-x: hidden;
 }
-.num { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 button, select, input { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .muted { color: var(--ink-3); }
@@ -79,7 +79,9 @@ svg text { paint-order: stroke; stroke: var(--halo); stroke-width: 3px; stroke-l
 .toolbar { background: var(--panel); border-bottom: 1px solid var(--line); }
 .toolbar-in { max-width: 1280px; margin: 0 auto; padding: 0 24px; min-height: 52px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
 .product { display: flex; align-items: center; gap: 10px; margin-right: auto; font-weight: 600; font-size: 14.5px; }
-.product .mark { width: 18px; height: 18px; background: var(--accent); }
+.product .mark { width: 22px; height: 22px; flex: none; }
+.product .mark circle { fill: none; stroke: var(--accent); stroke-width: 2; }
+.product .mark path { fill: var(--accent); }
 .product .crumb { font-weight: 400; color: var(--ink-3); }
 .product .crumb::before { content: "/"; margin: 0 10px 0 2px; color: var(--line-2); }
 .tb-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
@@ -96,16 +98,35 @@ main {
   max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px;
   display: grid; gap: 16px;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
-  grid-template-areas: "summary summary" "trend controls" "events controls" "details details";
+  grid-template-areas: "title title" "summary summary" "maincol side" "details details";
 }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; min-width: 0; }
 .panel-head { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .panel-head h2 { margin: 0; font-size: 13.5px; font-weight: 600; }
 .panel-head .meta { margin-left: auto; font-size: 12.5px; color: var(--ink-3); }
 #summary { grid-area: summary; }
-#trend { grid-area: trend; }
-#controls { grid-area: controls; align-self: start; }
-#events { grid-area: events; }
+#mainCol { grid-area: maincol; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+#mainCol #events { flex: 1; display: flex; flex-direction: column; min-height: 260px; }
+#mainCol .events-scroll { flex: 1 1 0; max-height: none; min-height: 200px; }
+#side { grid-area: side; align-self: start; display: grid; gap: 16px; min-width: 0; }
+#titleRow { grid-area: title; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; }
+#titleRow h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+#finding { margin: 4px 0 0; font-size: 14.5px; color: var(--ink); }
+#finding .muted { color: var(--ink-2); }
+#titleRow .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#titleRow .rec { font-size: 12.5px; color: var(--ink-2); }
+.rec-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--crit); margin-right: 6px; }
+/* What the model sees */
+.feat { list-style: none; margin: 0; padding: 6px 16px 12px; }
+.feat li { display: grid; grid-template-columns: minmax(0, 1fr) 90px 52px; gap: 10px; align-items: center; padding: 6px 0; font-size: 13px; }
+.feat li + li { border-top: 1px solid var(--line); }
+.feat .bar { height: 6px; background: var(--line); position: relative; }
+.feat .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink-3); }
+.feat .bar i.warn { background: var(--warn); } .feat .bar i.crit { background: var(--crit); }
+.feat .zv { text-align: right; color: var(--ink-2); }
+.legend { display: inline-flex; gap: 12px; font-size: 12px; color: var(--ink-3); }
+.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+#chart .band-warn { fill: var(--warn); opacity: .13; } #chart .band-crit { fill: var(--crit); opacity: .13; }
 #details { grid-area: details; }
 
 /* ------------------------------------------------------------ summary band */
@@ -152,10 +173,10 @@ main {
 .chart-wrap { position: relative; padding: 10px 12px 10px 4px; }
 #chart { display: block; width: 100%; height: 270px; }
 #chart .grid line { stroke: var(--grid); }
-#chart .tick { fill: var(--ink-3); font-size: 11px; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+#chart .tick { fill: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
 #chart .series { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linejoin: round; }
 #chart .end { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
-#chart .end-label { fill: var(--ink); font-size: 12px; font-weight: 500; font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+#chart .end-label { fill: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 #chart .th-warn { stroke: var(--warn); stroke-dasharray: 4 3; }
 #chart .th-crit { stroke: var(--crit); stroke-dasharray: 4 3; }
 #chart .th-label { fill: var(--ink-3); font-size: 11px; }
@@ -234,7 +255,8 @@ body.is-stale .metric .v, body.is-stale .health .big .v, body.is-stale #chart .s
 
 /* ------------------------------------------------------------ responsive */
 @media (max-width: 1000px) {
-  main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "summary" "trend" "controls" "events" "details"; }
+  main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "summary" "maincol" "side" "details"; }
+  #mainCol .events-scroll { flex: none; max-height: 320px; }
   #summary { grid-template-columns: minmax(0, 1fr); }
   .health { border-right: 0; border-bottom: 1px solid var(--line); }
 }
@@ -262,7 +284,7 @@ body.is-stale .metric .v, body.is-stale .health .big .v, body.is-stale #chart .s
 
 <header class="toolbar">
   <div class="toolbar-in">
-    <div class="product"><span class="mark" aria-hidden="true"></span>Pump Health Console<span class="crumb">Test rig P-101</span></div>
+    <div class="product"><svg class="mark" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="9.5"/><path d="M11 11 C9 7 9.5 4.5 11 3 C12 5.5 12.5 8 11 11Z"/><path d="M11 11 C15.5 10.5 17.8 11.6 18.6 13.6 C16 14.3 13.5 13.7 11 11Z"/><path d="M11 11 C8.5 14.6 6.3 15.8 4.2 15.2 C5 12.8 7.3 11.4 11 11Z"/></svg>Pump Health Console<span class="crumb">Test rig P-101</span></div>
     <div class="tb-item" role="status" aria-live="polite"><span class="sq" id="tbStatusSq"></span><b id="tbStatus">Connecting</b></div>
     <span class="tb-sep"></span>
     <div class="tb-item"><span class="sq" id="tbSourceSq"></span><span id="tbSource">Offline</span><span class="num muted" id="tbAge"></span></div>
@@ -278,6 +300,11 @@ body.is-stale .metric .v, body.is-stale .health .big .v, body.is-stale #chart .s
 <div class="toast" id="toast" role="alert" hidden><span class="m"></span></div>
 
 <main>
+  <div id="titleRow">
+    <div><h1>Overview</h1><p id="finding">Waiting for the first readings.</p></div>
+    <div class="actions"><span class="rec" id="recState"></span><button class="btn primary" id="recBtn" type="button" style="padding:0 14px">Start recording</button></div>
+  </div>
+
   <section class="panel" id="summary" aria-label="Summary">
     <div class="health">
       <div class="label">Health index</div>
@@ -295,11 +322,22 @@ body.is-stale .metric .v, body.is-stale .health .big .v, body.is-stale #chart .s
     <div class="metrics" id="metrics"></div>
   </section>
 
+  <div id="mainCol">
   <section class="panel" id="trend" aria-label="Trend">
-    <div class="panel-head"><h2>Trend</h2><span class="meta" style="margin-left:0">last 2 minutes</span><div class="seg" id="tabs" role="group" aria-label="Trend metric"></div></div>
+    <div class="panel-head"><h2>Last 2 minutes</h2><span class="legend" id="bandLegend"><span><i style="background:var(--warn);opacity:.35"></i>Warning</span><span><i style="background:var(--crit);opacity:.35"></i>Critical</span></span><div class="seg" id="tabs" role="group" aria-label="Trend metric"></div></div>
     <div class="chart-wrap" id="chartWrap"><svg id="chart" role="img" aria-label="Trend chart"></svg><div class="tip" id="tip"></div></div>
   </section>
 
+
+  <section class="panel" id="events" aria-label="Events">
+    <div class="panel-head"><h2>Events</h2><span class="meta" id="evMeta"></span></div>
+    <div class="events-scroll">
+      <table><thead><tr><th>Time</th><th>Severity</th><th>Message</th></tr></thead><tbody id="eventBody"></tbody></table>
+    </div>
+  </section>
+  </div>
+
+  <div id="side">
   <section class="panel" id="controls" aria-label="Controls">
     <div class="panel-head"><h2>Controls</h2><span class="meta" id="ctlMeta"></span></div>
     <div class="section">
@@ -327,13 +365,11 @@ body.is-stale .metric .v, body.is-stale .health .big .v, body.is-stale #chart .s
       <select class="src" id="replaySel" aria-label="Recording" hidden style="margin-top:8px"></select>
     </div>
   </section>
-
-  <section class="panel" id="events" aria-label="Events">
-    <div class="panel-head"><h2>Events</h2><span class="meta" id="evMeta"></span></div>
-    <div class="events-scroll">
-      <table><thead><tr><th>Time</th><th>Severity</th><th>Message</th></tr></thead><tbody id="eventBody"></tbody></table>
-    </div>
+  <section class="panel" id="model" aria-label="What the model sees">
+    <div class="panel-head"><h2>What the model sees</h2><span class="meta">largest deviations from normal</span></div>
+    <ul class="feat" id="featTop"></ul>
   </section>
+  </div>
 
   <details class="panel" id="details">
     <summary><h2>System details</h2><span class="meta">Model, features and sensors</span></summary>
@@ -496,8 +532,47 @@ healthy: score < ${st.warn}   warning: ${st.warn}–${st.crit}   critical: > ${s
 /* ====================================================================== render */
 const render = {
   all() { this.frame(); this.state(); this.events(); },
-  frame() { this.summary(); this.metrics(); drawTrend(); this.details(); this.toolbar(); },
-  state() { this.controls(); this.links(); this.toolbar(); },
+  frame() { this.summary(); this.finding(); this.metrics(); drawTrend(); this.details(); this.model(); this.toolbar(); },
+  state() { this.controls(); this.links(); this.record(); this.toolbar(); },
+
+  finding() {
+    const fr = store.frames, f = store.last;
+    if (!f) { $("finding").textContent = "Waiting for the first readings."; return; }
+    let i = fr.length - 1;
+    while (i > 0 && fr[i - 1].status === f.status) i--;
+    const secs = Math.round(f.t - fr[i].t);
+    const dur = secs >= 60 ? `${Math.floor(secs / 60)} min ${secs % 60} s` : `${secs} s`;
+    const since = i > 0 ? `for ${dur}` : `for at least ${dur}`;
+    const faults = new Set();
+    fr.forEach((x) => { if (x.diagnosis) faults.add(x.diagnosis.label); });
+    const [cls, label] = STATUS[f.status];
+    let text = `<span class="c-${cls}">${label}</span> ${since}.`;
+    if (f.diagnosis) text += ` Likely ${esc(f.diagnosis.label.toLowerCase())}.`;
+    else if (faults.size) text += ` <span class="muted">Earlier in this window: ${esc([...faults].join(", ").toLowerCase())}.</span>`;
+    else if (f.status === "HEALTHY") text += ` <span class="muted">No faults in the last 2 minutes.</span>`;
+    $("finding").innerHTML = text;
+  },
+
+  record() {
+    const s = store.state; if (!s) return;
+    const on = s.logging.enabled;
+    $("recBtn").textContent = on ? "Stop recording" : "Start recording";
+    $("recBtn").classList.toggle("primary", !on);
+    $("recState").innerHTML = on ? `<span class="rec-dot"></span>Recording · ${s.logging.rows} rows` : "";
+  },
+
+  model() {
+    const f = store.last, st = store.cfg.status;
+    if (!f?.z) {
+      $("featTop").innerHTML = `<li><span class="muted">${f && !f.running ? "Pump stopped, nothing to score." : "Filling the 5-sample window…"}</span></li>`;
+      return;
+    }
+    const top = store.cfg.features.map((d) => ({ d, z: f.z[d.key] })).sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 6);
+    $("featTop").innerHTML = top.map(({ d, z }) => {
+      const az = Math.abs(z), cls = az >= st.channel_z_crit ? "crit" : az >= st.channel_z_warn ? "warn" : "";
+      return `<li><span>${esc(d.label)}</span><span class="bar"><i class="${cls}" style="width:${Math.min(100, az / 8 * 100).toFixed(0)}%"></i></span><span class="zv num">${z >= 0 ? "+" : "−"}${az.toFixed(1)} σ</span></li>`;
+    }).join("");
+  },
 
   toolbar() {
     const s = store.state, f = store.last, link = linkState();
@@ -671,6 +746,18 @@ function drawTrend() {
   } else {
     g += `<line class="base" x1="${m.l}" x2="${m.l + pw}" y1="${Y(base)}" y2="${Y(base)}"/><text class="th-label" x="${m.l + 6}" y="${Y(base) - 5}">Normal ${fmt(base, M.dp)}</text>`;
   }
+  // Shade the periods the pump spent in warning / critical so the fault is visible on any metric.
+  let band = null;
+  const bands = [];
+  frames.forEach((f, i) => {
+    const k = f.status === "CRITICAL" || f.status === "DRY-RUN PROTECTION" ? "crit" : f.status === "WARNING" ? "warn" : null;
+    if (band && band.k !== k) { bands.push(band); band = null; }
+    if (k && !band) band = { k, a: i };
+    if (band) band.b = i;
+  });
+  if (band) bands.push(band);
+  const step = pw / (n - 1);
+  g = bands.map((b) => `<rect class="band-${b.k}" x="${X(b.a) - step / 2}" y="${m.t}" width="${(b.b - b.a + 1) * step}" height="${ph}"/>`).join("") + g;
   let d = "", pen = false;
   vals.forEach((v, i) => {
     if (v === null || v === undefined) { pen = false; return; }
@@ -730,6 +817,7 @@ function wire() {
   $("srcSel").addEventListener("change", (e) => transport.send("set_source", e.target.value));
   $("replaySel").addEventListener("change", (e) => transport.send("set_replay_file", e.target.value));
   $("logChk").addEventListener("change", (e) => transport.send("set_logging", e.target.checked));
+  $("recBtn").addEventListener("click", () => transport.send("set_logging", !store.state?.logging.enabled));
 
   // Theme: dark | light | system ("system" follows the OS setting).
   const sysLight = matchMedia("(prefers-color-scheme: light)");
