@@ -227,6 +227,18 @@ dialog#conn::backdrop { background: rgba(0,0,0,.55); }
 #conn .state.err { color: var(--negative); }
 #conn .share { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
 #conn code { font-size: 12px; overflow-wrap: anywhere; color: var(--text-2); }
+/* Needs attention: every current problem, in words, with its fix. Shown only when there is one. */
+#issues { margin-bottom: 24px; }
+#issues[hidden] { display: none; }
+#issueList { list-style: none; margin: 10px 0 0; padding: 0 0 6px; }
+#issueList li { position: relative; padding: 10px 20px 10px 22px; }
+#issueList li + li { border-top: 1px solid var(--rule); }
+#issueList li::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px; background: var(--warning); }
+#issueList li.crit::before { background: var(--negative); }
+#issueList .it { font-weight: 600; }
+#issueList .it .pill { margin-right: 8px; vertical-align: 1px; }
+#issueList .fx { color: var(--text-2); margin-top: 3px; }
+#issueList .fx b { color: var(--text); font-weight: 600; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; max-width: min(420px, calc(100vw - 32px)); padding: 10px 14px;
   background: var(--raised); border-radius: 6px; box-shadow: var(--shadow); font-size: 13px; }
 .toast[hidden] { display: none; }
@@ -313,6 +325,11 @@ body.is-stale .kpi .v, body.is-stale #chart .series, body.is-stale .strip { opac
       <button class="btn invert" id="recBtn" type="button">Start recording</button>
     </div>
   </header>
+
+  <section class="card" id="issues" aria-label="Needs attention" aria-live="polite" hidden>
+    <div class="card-head"><h2>Needs attention</h2><span class="meta" id="issuesMeta"></span></div>
+    <ul id="issueList"></ul>
+  </section>
 
   <section class="card" aria-label="Current readings" style="margin-bottom:24px">
     <div class="kpis" id="kpis">
@@ -497,7 +514,13 @@ const handlers = {
     store.frames.push(f); if (store.frames.length > UI.trendLen) store.frames.shift();
     store.lastFrameAt = performance.now(); render.frame();
   },
-  state(s) { store.state = s; render.state(); },
+  state(s) {
+    store.state = s;
+    // Keep ~30 s of counter snapshots so we can tell *new* rejects / losses from old ones.
+    (store.counterLog ||= []).push({ t: performance.now(), c: { invalid: s.counters.invalid, dropped: s.counters.dropped } });
+    while (store.counterLog.length > 35) store.counterLog.shift();
+    render.state();
+  },
   alert(m) {
     if (m.alert.toast) toast(m.alert.toast, m.alert.msg);
     store.events.unshift(m.alert); store.events.length = Math.min(store.events.length, UI.maxEvents); render.events();
@@ -541,8 +564,18 @@ critical score > ${st.crit}`;
 /* ====================================================================== render */
 const render = {
   all() { this.frame(); this.state(); this.events(); },
-  frame() { this.header(); this.kpis(); this.strip(); drawTrend(); this.diag(); this.details(); },
-  state() { this.controls(); this.links(); this.header(); },
+  frame() { this.header(); this.kpis(); this.strip(); drawTrend(); this.diag(); this.details(); this.issues(); },
+  state() { this.controls(); this.links(); this.header(); this.issues(); },
+
+  issues() {
+    const list = findIssues(), box = $("issues");
+    box.hidden = !list.length;
+    if (!list.length) return;
+    const crit = list.filter((i) => i.sev === "crit").length;
+    $("issuesMeta").textContent = `${list.length} ${list.length === 1 ? "issue" : "issues"}${crit ? `, ${crit} critical` : ""}`;
+    const html = list.map((i) => `<li class="${i.sev}"><div class="it"><span class="pill ${i.sev}">${i.sev === "crit" ? "Error" : "Warning"}</span>${esc(i.title)}</div><div class="fx"><b>Fix:</b> ${esc(i.fix)}</div></li>`).join("");
+    if ($("issueList").innerHTML !== html) $("issueList").innerHTML = html;
+  },
 
   header() {
     const s = store.state, f = store.last, link = linkState();
@@ -779,7 +812,94 @@ function wire() {
   });
   sysLight.addEventListener("change", () => { if (document.documentElement.dataset.themePref === "system") apply("system"); });
   apply(document.documentElement.dataset.themePref || "dark");
-  setInterval(() => { if (store.cfg) render.header(); }, 1000);
+  setInterval(() => { if (store.cfg) render.header(); render.issues(); }, 1000);
+}
+
+/* ====================================================================== problems and their fixes */
+const FIELD_SENSOR = { rpm: "speed sensor (A3144 Hall, GPIO26)", temp_c: "temperature sensor (DS18B20, GPIO4)",
+  current_a: "current sensor (ACS712, GPIO34 via divider)", flow_lpm: "flow sensor (YF-S201, GPIO27)",
+  pressure_bar: "pressure transducer (GPIO35 via divider)", vib_x: "accelerometer (ADXL345, I²C)", vib_y: "accelerometer (ADXL345, I²C)",
+  vib_z: "accelerometer (ADXL345, I²C)", vib_peak: "accelerometer (ADXL345, I²C)", float: "float switch (GPIO25)" };
+
+function fixForPortProblem(text) {
+  const t = String(text || "").toLowerCase();
+  if (t.includes("busy") || t.includes("access is denied")) return "Another program has the port open. Close Arduino IDE's Serial Monitor (or any serial terminal) and wait a few seconds.";
+  if (t.includes("permission denied")) return "Give your user access to serial ports: run  sudo usermod -aG dialout $USER  then log out and back in.";
+  if (t.includes("silent")) return "The board is connected but sends nothing. Flash the firmware with flash.bat, then check the DS18B20 and ADXL345 wiring (the firmware stays silent until both are found).";
+  if (t.includes("not valid pump json")) return "The board runs different firmware or a different baud rate. Flash firmware/esp32_pump_node with flash.bat (115200 baud).";
+  if (t.includes("no usb serial ports")) return "Plug the ESP32 in with a data-capable USB cable. On Windows, install the CP210x or CH340 driver if no COM port appears in Device Manager.";
+  if (t.includes("no data for") || t.includes("reopening")) return "The ESP32 stopped sending. Check the USB cable and power, then press the board's EN (reset) button.";
+  if (t.includes("connect refused") || t.includes("mqtt")) return "Check the MQTT broker address, port, user name and password in backend/config.py, and that the ESP32 is on the same network.";
+  if (t.includes("cannot read") || t.includes("replay")) return "Pick another recording in the Data source list, or record a new one with Start recording.";
+  if (t.includes("could not open") || t.includes("open failed") || t.includes("filenotfound")) return "That serial port does not exist. Set Data source to Auto so the ESP32 is found by itself.";
+  return "Check the ESP32's USB cable and power, then set Data source to Auto.";
+}
+
+function fixForReject(reason, detail) {
+  const d = String(detail || "");
+  if (reason === "not_json" && d.startsWith("# sensor fault")) {
+    const missing = [];
+    if (/temp=0/.test(d)) missing.push("temperature sensor (DS18B20): check GPIO4, 3.3 V, GND and the 4.7 kΩ pull-up to 3.3 V");
+    if (/adxl=0/.test(d)) missing.push("accelerometer (ADXL345): check SDA → GPIO21, SCL → GPIO22, 3.3 V and GND");
+    return { title: "A sensor on the ESP32 is not detected", fix: missing.length ? `Not found: ${missing.join("; ")}.` : "Check the DS18B20 and ADXL345 wiring." };
+  }
+  if (reason === "range") {
+    const field = d.split("=")[0];
+    return { title: `Reading out of range: ${d}`, fix: `Check the wiring and calibration of the ${FIELD_SENSOR[field] || field}. 5 V sensors must go through a voltage divider.` };
+  }
+  if (reason === "missing" || reason === "type") return { title: `The ESP32 sends an unexpected message format (${reason}: ${d})`, fix: "Its firmware is older or different. Re-flash it with flash.bat so it matches this dashboard." };
+  if (reason === "not_json") return { title: "The ESP32 prints text that isn't pump data", fix: "Wrong firmware or baud rate. Flash it with flash.bat (115200 baud)." };
+  if (reason === "parse" || reason === "too_long" || reason === "encoding") return { title: "Garbled data on the serial line", fix: "Usually a loose or long USB cable, electrical noise from the motor, or the wrong baud rate (must be 115200). Try another cable and route it away from the motor wiring." };
+  if (reason === "ts_order") return { title: "Readings arrived out of order", fix: "Usually harmless right after an ESP32 reset. If it keeps happening, re-flash the firmware." };
+  return { title: `Rejected readings (${reason})`, fix: "Re-flash the ESP32 with flash.bat and check the sensor wiring." };
+}
+
+function findIssues() {
+  const out = [], s = store.state, f = store.last;
+  if (!store.wsOpen) {
+    const host = rigHost(UI.wsUrl);
+    out.push({ sev: "crit", title: `Can't reach the rig backend at ${host}`,
+      fix: location.protocol === "https:" && /^ws:\/\//.test(UI.wsUrl)
+        ? "This page is on https, so it needs the rig's https tunnel address. Run share.bat on the rig and paste its link via the plug icon."
+        : "Start it with start.bat (or python -m backend) on the computer the ESP32 is plugged into. If it runs on another device, click the plug icon in the left rail and enter its address." });
+    return out;
+  }
+  if (!s) return out;
+  const link = linkState(), ser = s.serial;
+
+  if (s.source_live && link.bad && store.everConnected && f) {
+    out.push({ sev: "crit", title: "The ESP32 stopped sending data", fix: fixForPortProblem(s.source_error || "no data for") });
+  } else if (s.source !== "sim" && s.source_error) {
+    out.push({ sev: "crit", title: `Data source problem: ${s.source_error}`, fix: fixForPortProblem(s.source_error) });
+  }
+  // A device is plugged in but was rejected by the auto-scan (only real problems, not the empty case).
+  if (ser?.auto && !ser.connected) {
+    for (const r of ser.scan || []) {
+      if (r.result.includes("✓") || r.result === "not reachable") continue;
+      out.push({ sev: "warn", title: `${r.port} (${r.desc}) is plugged in but not usable: ${r.result}`, fix: fixForPortProblem(r.result) });
+    }
+  }
+  // New rejects / losses in the last ~30 s.
+  const log = store.counterLog || [], first = log[0], c = s.counters;
+  if (first && c.invalid > first.c.invalid && c.last_invalid) {
+    const x = fixForReject(c.last_invalid.reason, c.last_invalid.detail);
+    out.push({ sev: c.last_invalid.reason === "range" || c.last_invalid.reason === "not_json" ? "crit" : "warn",
+      title: `${x.title} (${c.invalid - first.c.invalid} rejected in the last 30 s)`, fix: x.fix });
+  }
+  if (first && c.dropped - first.c.dropped >= 3) {
+    out.push({ sev: "warn", title: `${c.dropped - first.c.dropped} readings lost in the last 30 s`, fix: "Use a shorter, better USB cable and keep it away from the motor and mains wiring. Over Wi-Fi, move the ESP32 closer to the router." });
+  }
+  // The pump itself.
+  if (f && !link.bad) {
+    if (f.reading.float === 0) {
+      out.push({ sev: "crit", title: "Water level low: the pump is protected from running dry", fix: "Refill the sump so the float switch reads OK, then restart the pump." });
+    } else if (f.diagnosis && (f.status === "WARNING" || f.status === "CRITICAL")) {
+      out.push({ sev: f.status === "CRITICAL" ? "crit" : "warn", title: `Pump ${f.status.toLowerCase()}: ${f.diagnosis.label} (${Math.round(f.diagnosis.confidence * 100)}% match)`, fix: f.diagnosis.action });
+    } else if (f.status === "WARNING" || f.status === "CRITICAL") {
+      out.push({ sev: f.status === "CRITICAL" ? "crit" : "warn", title: `Pump ${f.status.toLowerCase()}: unusual readings that match no known fault`, fix: "Compare the readings with their normal values above and inspect the pump; record the run with Start recording for later analysis." });
+    }
+  }
+  return out;
 }
 
 /* ====================================================================== connection dialog */

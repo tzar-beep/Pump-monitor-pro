@@ -40,6 +40,9 @@ def lines(args):
     n = 0
     while True:
         n += 1
+        if args.sensor_fault:          # like the real firmware with an unwired sensor: no data, only this line
+            yield f"# sensor fault: temp={0 if 'temp' in args.sensor_fault else 1} adxl={0 if 'adxl' in args.sensor_fault else 1}", True
+            continue
         msg = sim.step(1.0 / args.rate)
         if args.drop_every and n % args.drop_every == 0:
             continue                                   # lost message -> seq gap
@@ -76,6 +79,7 @@ def main():
     ap.add_argument("--scenario", default="normal", choices=list(CONFIG["simulator"]["scenarios"]))
     ap.add_argument("--valve", type=float, default=0)
     ap.add_argument("--bad-every", type=int, default=0)
+    ap.add_argument("--sensor-fault", choices=["temp", "adxl", "temp,adxl"], help="emulate an undetected sensor")
     ap.add_argument("--drop-every", type=int, default=0)
     ap.add_argument("--stall-after", type=float, default=0)
     ap.add_argument("--stall-s", type=float, default=8)
