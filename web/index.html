@@ -214,6 +214,19 @@ pre.formula { margin: 0 20px 12px; padding: 12px; background: var(--raised); bor
 .switch input { accent-color: var(--accent); }
 
 /* ------------------------------------------------------------ toast + stale */
+dialog#conn { border: 0; padding: 0; border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: var(--shadow);
+  width: min(460px, calc(100vw - 32px)); }
+dialog#conn::backdrop { background: rgba(0,0,0,.55); }
+#conn form { padding: 20px; }
+#conn h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+#conn p { margin: 0 0 14px; color: var(--text-2); }
+#conn label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+#conn input[type=text] { width: 100%; height: 36px; border-radius: 6px; border: 1px solid var(--border); background: var(--ground); padding: 0 12px; }
+#conn .row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+#conn .state { margin-top: 12px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+#conn .state.err { color: var(--negative); }
+#conn .share { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
+#conn code { font-size: 12px; overflow-wrap: anywhere; color: var(--text-2); }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; max-width: min(420px, calc(100vw - 32px)); padding: 10px 14px;
   background: var(--raised); border-radius: 6px; box-shadow: var(--shadow); font-size: 13px; }
 .toast[hidden] { display: none; }
@@ -264,8 +277,28 @@ body.is-stale .kpi .v, body.is-stale #chart .series, body.is-stale .strip { opac
   <span class="hr"></span>
   <a href="#controlsCard" data-tip="Simulator" aria-label="Simulator"><svg class="i" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></a>
   <a href="#detailsCard" data-tip="Method and sensors" aria-label="Method and sensors"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></a>
-  <button class="bottom" id="themeBtn" type="button" data-tip="Theme" aria-label="Change theme"><svg class="i" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18z" fill="currentColor"/><circle cx="12" cy="12" r="9"/></svg></button>
+  <button class="bottom" id="connBtn" type="button" data-tip="Connection" aria-label="Connection"><svg class="i" viewBox="0 0 24 24"><path d="M9 7V3M15 7V3M7 7h10v5a5 5 0 0 1-10 0zM12 17v4"/></svg></button>
+  <button id="themeBtn" type="button" data-tip="Theme" aria-label="Change theme"><svg class="i" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18z" fill="currentColor"/><circle cx="12" cy="12" r="9"/></svg></button>
 </nav>
+
+<dialog id="conn" aria-labelledby="connTitle">
+  <form method="dialog" id="connForm">
+    <h2 id="connTitle">Connect to a rig</h2>
+    <p>Enter the address of the computer or Raspberry Pi running the backend.</p>
+    <label for="connAddr">Rig address</label>
+    <input type="text" id="connAddr" placeholder="192.168.1.20:8000  or  my-rig.trycloudflare.com" autocomplete="off" spellcheck="false">
+    <div class="row">
+      <button class="btn invert" type="submit" value="connect">Connect</button>
+      <button class="btn" type="button" id="connCancel">Close</button>
+    </div>
+    <div class="state" id="connState"></div>
+    <div class="share">
+      <label>Link to send to someone (opens this dashboard on this rig)</label>
+      <code id="shareLink">—</code>
+      <div class="row"><button class="btn" type="button" id="copyLink">Copy link</button></div>
+    </div>
+  </form>
+</dialog>
 
 <div class="toast" id="toast" role="alert" hidden><span class="m"></span></div>
 
@@ -376,7 +409,7 @@ body.is-stale .kpi .v, body.is-stale #chart .series, body.is-stale .strip { opac
 /* Pump Health Console — browser dashboard. Renders what the Raspberry Pi sends over the
    WebSocket; the browser does no ML.  transport (WebSocket) -> store -> render */
 const UI = {
-  wsUrl: location.protocol.startsWith("http") ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws` : "ws://localhost:8000/ws",
+  wsUrl: null,   // decided by rigAddress() below
   trendLen: 120, maxEvents: 60, reconnectMs: [500, 1000, 2000, 4000, 5000],
 };
 const fmt = (v, dp) => (v === null || v === undefined || Number.isNaN(v)) ? "—" : v.toFixed(dp);
@@ -407,20 +440,50 @@ const METRICS = { score: { label: "Anomaly score", unit: "", dp: 2, get: (f) => 
 const TAB = { score: "Anomaly", flow: "Flow", pressure: "Pressure", current: "Current", temp: "Temperature", vib: "Vibration", rpm: "Speed" };
 
 /* ====================================================================== store + transport */
+/* ====================================================================== which rig
+   The page can be served by the rig's own backend (then it talks to the same host), or from
+   anywhere else, e.g. Vercel. Then the rig address comes from ?pi=<host[:port]> in the link,
+   or from the Connection dialog, and is remembered in this browser. */
+function toWsUrl(addr) {
+  let a = String(addr || "").trim().replace(/\/+$/, "");
+  if (!a) return null;
+  if (/^https?:\/\//i.test(a)) a = a.replace(/^http/i, "ws");
+  if (!/^wss?:\/\//i.test(a)) a = `${location.protocol === "https:" ? "wss" : "ws"}://${a}`;
+  return /\/ws$/.test(a) ? a : `${a}/ws`;
+}
+function rigHost(url) { return url ? url.replace(/^wss?:\/\//, "").replace(/\/ws$/, "") : ""; }
+function rigAddress() {
+  const fromLink = new URLSearchParams(location.search).get("pi");
+  if (fromLink) { try { localStorage.setItem("phc-rig", fromLink); } catch {} return toWsUrl(fromLink); }
+  let saved = null; try { saved = localStorage.getItem("phc-rig"); } catch {}
+  if (saved) return toWsUrl(saved);
+  if (location.protocol.startsWith("http")) return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+  return "ws://localhost:8000/ws";
+}
+UI.wsUrl = rigAddress();
+
 const store = { cfg: null, frames: [], events: [], state: null, ws: null, wsOpen: false, lastFrameAt: 0, metric: "score",
   get last() { return this.frames[this.frames.length - 1] || null; } };
 
 const transport = (() => {
-  let attempt = 0;
+  let attempt = 0, timer = null, gen = 0;
   function connect() {
-    const ws = new WebSocket(UI.wsUrl);
+    const my = ++gen;
+    let ws;
+    try { ws = new WebSocket(UI.wsUrl); } catch (e) { store.lastError = String(e.message || e); schedule(my); return; }
     store.ws = ws;
-    ws.onopen = () => { store.wsOpen = true; attempt = 0; };
-    ws.onclose = () => { store.wsOpen = false; setTimeout(connect, UI.reconnectMs[Math.min(attempt++, UI.reconnectMs.length - 1)]); render.header(); };
+    ws.onopen = () => { if (my !== gen) return ws.close(); store.wsOpen = true; store.everConnected = true; store.lastError = ""; attempt = 0; connUi(); };
+    ws.onclose = () => { if (my !== gen) return; store.wsOpen = false; render.header(); connUi(); schedule(my); };
     ws.onerror = () => ws.close();
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } handlers[m.type]?.(m); };
   }
-  return { connect, send: (cmd, value) => { if (store.ws?.readyState === 1) store.ws.send(JSON.stringify({ cmd, value })); } };
+  function schedule(my) { clearTimeout(timer); timer = setTimeout(() => { if (my === gen) connect(); }, UI.reconnectMs[Math.min(attempt++, UI.reconnectMs.length - 1)]); }
+  function retarget(url) {
+    UI.wsUrl = url; attempt = 0; clearTimeout(timer);
+    const old = store.ws; gen++; if (old) { old.onclose = null; old.close(); }
+    store.wsOpen = false; store.cfg = null; connect();
+  }
+  return { connect, retarget, send: (cmd, value) => { if (store.ws?.readyState === 1) store.ws.send(JSON.stringify({ cmd, value })); } };
 })();
 
 const handlers = {
@@ -718,6 +781,43 @@ function wire() {
   apply(document.documentElement.dataset.themePref || "dark");
   setInterval(() => { if (store.cfg) render.header(); }, 1000);
 }
+
+/* ====================================================================== connection dialog */
+function shareLink() {
+  const host = rigHost(UI.wsUrl);
+  const servedByRig = location.protocol.startsWith("http") && host === location.host;
+  if (servedByRig) return `${location.protocol}//${location.host}/`;
+  const base = location.protocol.startsWith("http") ? `${location.origin}${location.pathname}` : "https://<your-app>.vercel.app/";
+  return `${base}?pi=${encodeURIComponent(host)}`;
+}
+function connUi() {
+  const st = $("connState"); if (!st) return;
+  const host = rigHost(UI.wsUrl);
+  if (store.wsOpen) { st.className = "state"; st.textContent = `Connected to ${host}.`; }
+  else {
+    let msg = `Not connected to ${host}.`;
+    if (location.protocol === "https:" && /^ws:\/\//.test(UI.wsUrl)) msg += " This page is https, so the rig must be reached over https (a tunnel address), not a plain local IP.";
+    else msg += " Check that the backend is running and that this device can reach it.";
+    st.className = "state err"; st.textContent = msg;
+  }
+  $("shareLink").textContent = shareLink();
+}
+function openConn() { $("connAddr").value = rigHost(UI.wsUrl); connUi(); if (!$("conn").open) $("conn").showModal(); }
+$("connBtn").addEventListener("click", openConn);
+$("connCancel").addEventListener("click", () => $("conn").close());
+$("connForm").addEventListener("submit", (e) => {
+  const url = toWsUrl($("connAddr").value);
+  if (!url) { e.preventDefault(); return; }
+  try { localStorage.setItem("phc-rig", rigHost(url)); } catch {}
+  transport.retarget(url);
+  connUi();
+});
+$("copyLink").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(shareLink()); $("copyLink").textContent = "Copied"; } catch { $("copyLink").textContent = "Copy failed"; }
+  setTimeout(() => { $("copyLink").textContent = "Copy link"; }, 1500);
+});
+// Opened somewhere that is not a rig (e.g. Vercel) and nothing answers: ask for the address.
+setTimeout(() => { if (!store.everConnected) openConn(); }, 4000);
 
 wire();
 transport.connect();

@@ -82,6 +82,44 @@ It is deep-merged over `CONFIG`:
 { "source": "serial", "serial": { "port": "/dev/ttyACM0" }, "logging": { "enabled": true } }
 ```
 
+## Sharing it with someone
+
+The hardware always plugs into the computer or Raspberry Pi that runs the backend. Phones and other
+computers only open the dashboard, and the backend does the rest. There are three ways to share it.
+
+**1. Your friend runs it on their own computer, with their own ESP32**
+
+1. Send them the repository: https://github.com/tzar-beep/Pump-monitor-pro. They can use *Code → Download ZIP*
+   if they don't use git.
+2. They install Python 3 from python.org (tick "Add to PATH").
+3. They double-click **`start.bat`**. The dashboard opens and shows simulated data.
+4. They plug the ESP32 into USB. It is detected and the dashboard switches to **Live** by itself.
+   If the board is new, they run **`flash.bat`** once first to load the firmware.
+
+On a Raspberry Pi they run `./deploy/install_pi.sh --kiosk` instead. Then it starts on every boot.
+
+**2. Your friend opens your rig from anywhere (no setup on their side)**
+
+Double-click **`share.bat`** (or run `python tools/share.py`). It starts the backend, installs
+cloudflared the first time, and prints a link like `https://something.trycloudflare.com`.
+Send that link. It works on any phone or laptop while the window stays open. The link changes each
+time you run it.
+
+**3. A fixed Vercel link**
+
+Vercel can host the page (`web/`), but not the backend: the backend needs to run continuously and use USB.
+So the Vercel page connects to a rig that you name:
+
+1. Import the GitHub repo in Vercel. `vercel.json` already tells it to publish `web/` as a static site.
+2. Run `share.bat --vercel your-app.vercel.app`. Besides the tunnel link, it prints
+   `https://your-app.vercel.app/?pi=something.trycloudflare.com`. Send that link.
+3. Opening the Vercel link with no rig address shows a **Connect to a rig** box. Paste the tunnel
+   address there, or use the plug icon in the left rail at any time. The address is remembered on that
+   device, and the box also gives a ready-made link to copy.
+
+An https page (Vercel) can only reach a rig over https, so use the tunnel address, not a local
+`192.168.x.x` IP. On the same Wi-Fi, simply open `http://<pi-ip>:8000` instead, with no Vercel needed.
+
 ## The dashboard
 
 One screen, kept deliberately simple:
@@ -300,7 +338,8 @@ firmware/  esp32_pump_node/esp32_pump_node.ino
 tools/     flash_esp32.py · scenario_check.py · test_autodetect.py · test_e2e.py · test_live_path.sh · fake_esp32.py
            replay_eval.py · train_iforest.py · make_sample_csv.py
 deploy/    install_pi.sh (Pi setup + boot service + kiosk) · pump-console.service · kiosk.sh
-start.bat  Windows one-click launcher · flash.bat  one-click ESP32 flashing
+start.bat  Windows one-click launcher · flash.bat  one-click ESP32 flashing · share.bat  public link to this rig
+vercel.json  publishes web/ as a static site on Vercel
 data/      sample_session.csv  (simulated session for replay/training demos)
 models/    iforest.json        (demo model trained on simulated data)
 logs/      CSV session logs (git-ignored)
